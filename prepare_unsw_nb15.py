@@ -1,9 +1,9 @@
 """
 Prepare a manageable UNSW-NB15 subset for the anomaly detector.
 
-Expected input files from the official UNSW-NB15 split:
-- UNSW_NB15_training-set.csv
-- UNSW_NB15_testing-set.csv
+Supported sources:
+- official train/test CSV files
+- a public Hugging Face mirror of UNSW-NB15
 """
 
 from __future__ import annotations
@@ -44,24 +44,24 @@ FEATURE_CANDIDATES = [
     "is_sm_ips_ports",
 ]
 
+HF_FEATURE_ALIASES = {
+    "Sload": "sload",
+    "Dload": "dload",
+    "Spkts": "spkts",
+    "Dpkts": "dpkts",
+    "Sintpkt": "sinpkt",
+    "Dintpkt": "dinpkt",
+}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare a smaller UNSW-NB15 CSV for the detector project.")
-    parser.add_argument("--train", required=True, help="Path to UNSW_NB15_training-set.csv")
-    parser.add_argument("--test", required=True, help="Path to UNSW_NB15_testing-set.csv")
+    parser.add_argument("--train", help="Path to UNSW_NB15_training-set.csv")
+    parser.add_argument("--test", help="Path to UNSW_NB15_testing-set.csv")
+    parser.add_argument("--hf-dataset", help="Optional Hugging Face dataset id, for example Mouwiya/UNSW-NB15")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Path to the prepared output CSV.")
-    parser.add_argument(
-        "--rows-per-class",
-        type=int,
-        default=4000,
-        help="Maximum number of rows to keep for each label class.",
-    )
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        default=42,
-        help="Random seed used when sampling.",
-    )
+    parser.add_argument("--rows-per-class", type=int, default=4000, help="Maximum number of rows to keep for each label class.")
+    parser.add_argument("--random-state", type=int, default=42, help="Random seed used when sampling.")
     return parser
 
 
@@ -74,32 +74,51 @@ def load_csv(path: Path) -> pd.DataFrame:
     return dataframe
 
 
+def load_hf_dataset(dataset_id: str) -> pd.DataFrame:
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:
+        raise ImportError("The Hugging Face workflow requires the 'datasets' package. Install it with: python -m pip install datasets pyarrow") from exc
+
+    dataset = load_dataset(dataset_id, split="train")
+    dataframe = dataset.to_pandas()
+    for source_name, normalized_name in HF_FEATURE_ALIASES.items():
+        if source_name in dataframe.columns and normalized_name not in dataframe.columns:
+            dataframe = dataframe.rename(columns={source_name: normalized_name})
+    return dataframe
+
+
 def sample_balanced(dataframe: pd.DataFrame, rows_per_class: int, random_state: int) -> pd.DataFrame:
     parts = []
-    for label_value, group in dataframe.groupby("label"):
+    for _, group in dataframe.groupby("label"):
         sample_size = min(rows_per_class, len(group))
         parts.append(group.sample(n=sample_size, random_state=random_state))
     return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=random_state).reset_index(drop=True)
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    train_path = Path(args.train)
-    test_path = Path(args.test)
-    output_path = Path(args.output)
-
-    combined = pd.concat([load_csv(train_path), load_csv(test_path)], ignore_index=True)
-
-    if "label" not in combined.columns:
-        raise ValueError("Expected a 'label' column in the UNSW-NB15 CSV files.")
-
-    selected_columns = [column for column in FEATURE_CANDIDATES if column in combined.columns]
+def select_features(dataframe: pd.DataFrame) -> pd.DataFrame:
+    if "label" not in dataframe.columns:
+        raise ValueError("Expected a 'label' column in the UNSW-NB15 data.")
+    selected_columns = [column for column in FEATURE_CANDIDATES if column in dataframe.columns]
     if not selected_columns:
         raise ValueError("None of the expected UNSW-NB15 numeric feature columns were found.")
-
-    prepared = combined[selected_columns + ["label"]].copy()
+    prepared = dataframe[selected_columns + ["label"]].copy()
     prepared["label"] = prepared["label"].astype(int)
-    prepared = prepared.dropna()
+    return prepared.dropna()
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    output_path = Path(args.output)
+
+    if args.hf_dataset:
+        combined = load_hf_dataset(args.hf_dataset)
+    else:
+        if not args.train or not args.test:
+            raise ValueError("Provide both --train and --test, or use --hf-dataset.")
+        combined = pd.concat([load_csv(Path(args.train)), load_csv(Path(args.test))], ignore_index=True)
+
+    prepared = select_features(combined)
     prepared = sample_balanced(prepared, args.rows_per_class, args.random_state)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +129,7 @@ def main() -> None:
 
     print(f"Prepared dataset written to: {output_path}")
     print(f"Rows: {len(prepared)}")
-    print(f"Features kept: {len(selected_columns)}")
+    print(f"Features kept: {len(prepared.columns) - 1}")
     print(f"Benign rows: {benign_count}")
     print(f"Attack rows: {attack_count}")
 

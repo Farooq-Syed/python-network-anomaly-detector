@@ -1,8 +1,8 @@
 # Python-Based Network Anomaly Detector
 
-This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built as a small security analytics project around flow-level features such as packet counts, byte volume, duration, failed logins, and port activity.
+This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
-The current pipeline compares four detectors:
+The pipeline compares four detectors:
 
 - `Z-score`
 - `Isolation Forest`
@@ -18,7 +18,7 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 - comparison across multiple anomaly detection methods
 - optional evaluation with labeled data
 - exported reports, metrics, and plots
-- helper script for preparing `UNSW-NB15`
+- reproducible UNSW-NB15 subset preparation
 
 ## Project Structure
 
@@ -31,13 +31,21 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 |-- LICENSE
 |-- data/
 |   |-- sample_network_traffic.csv
-|   `-- labeled_research_sample.csv
+|   |-- labeled_research_sample.csv
+|   `-- unsw_nb15_public_subset.csv
 |-- assets/
 |   |-- ensemble_confusion_matrix_sample.png
 |   |-- feature_scatter_sample.png
-|   `-- method_comparison_sample.png
+|   |-- method_comparison_sample.png
+|   |-- unsw_ensemble_confusion_matrix.png
+|   |-- unsw_f1_comparison.png
+|   |-- unsw_feature_scatter.png
+|   `-- unsw_method_comparison.png
 |-- notebooks/
 |   `-- network_anomaly_analysis.ipynb
+|-- results/
+|   |-- unsw_nb15_subset_metrics.json
+|   `-- unsw_nb15_subset_summary.json
 `-- docs/
     `-- real_dataset_guide.md
 ```
@@ -46,6 +54,12 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 
 ```powershell
 python -m pip install -r requirements.txt
+```
+
+Optional, only if you want to pull the public Hugging Face mirror of `UNSW-NB15` directly:
+
+```powershell
+python -m pip install datasets pyarrow
 ```
 
 ## Usage
@@ -62,11 +76,18 @@ Run the labeled sample with evaluation:
 python detector.py --input data/labeled_research_sample.csv --label-column label
 ```
 
-Prepare and run a subset from `UNSW-NB15`:
+Prepare a subset from official `UNSW-NB15` train and test CSV files:
 
 ```powershell
 python prepare_unsw_nb15.py --train "C:\path\to\UNSW_NB15_training-set.csv" --test "C:\path\to\UNSW_NB15_testing-set.csv"
 python detector.py --input data/unsw_nb15_portfolio_subset.csv --label-column label
+```
+
+Prepare a subset from a public Hugging Face mirror of the dataset:
+
+```powershell
+python prepare_unsw_nb15.py --hf-dataset Mouwiya/UNSW-NB15 --output data/unsw_nb15_public_subset.csv --rows-per-class 3000
+python detector.py --input data/unsw_nb15_public_subset.csv --label-column label
 ```
 
 ## Output
@@ -76,7 +97,7 @@ The detector writes its results to `output/`:
 - `anomaly_report.csv`
 - `summary.json`
 - `metrics.json` when a label column is provided
-- plots such as feature scatter, method comparison charts, and an ensemble confusion matrix
+- plots such as feature scatter, method comparison charts, F1 comparison, and an ensemble confusion matrix
 
 ## Methods
 
@@ -104,8 +125,6 @@ Uses a majority-style vote across the four methods to reduce dependence on any s
 
 On the included labeled research sample (`24` rows, `4` attack rows), the ensemble flagged all four malicious rows.
 
-Sample metrics from `output/metrics.json`:
-
 | Method | Precision | Recall | F1-score | Accuracy |
 | --- | --- | --- | --- | --- |
 | Z-score | 1.00 | 1.00 | 1.00 | 1.00 |
@@ -114,29 +133,49 @@ Sample metrics from `output/metrics.json`:
 | One-Class SVM | 1.00 | 0.50 | 0.67 | 0.92 |
 | Ensemble | 1.00 | 1.00 | 1.00 | 1.00 |
 
-These numbers come from a small synthetic sample and are mainly useful for validating the pipeline. The next step is to run the same workflow on a larger public dataset such as `UNSW-NB15`.
+These numbers are mainly useful for validating the pipeline on a small labeled example.
 
-## Sample Visuals
+## UNSW-NB15 Subset Results
 
-Feature scatter:
+The repository also includes a tracked subset, `data/unsw_nb15_public_subset.csv`, derived from the public `UNSW-NB15` dataset with `3000` benign and `3000` attack rows. This subset was used to test the pipeline on a more realistic benchmark.
 
-![Feature scatter](assets/feature_scatter_sample.png)
+Metrics from `results/unsw_nb15_subset_metrics.json`:
 
-Method comparison:
+| Method | Precision | Recall | F1-score | Accuracy |
+| --- | --- | --- | --- | --- |
+| Z-score | 0.4712 | 0.2157 | 0.2959 | 0.4868 |
+| Isolation Forest | 0.6375 | 0.1530 | 0.2468 | 0.5330 |
+| Local Outlier Factor | 0.7097 | 0.1703 | 0.2747 | 0.5503 |
+| One-Class SVM | 0.5153 | 0.1237 | 0.1995 | 0.5037 |
+| Ensemble | 0.5796 | 0.1760 | 0.2700 | 0.5242 |
 
-![Method comparison](assets/method_comparison_sample.png)
+These results are much less “perfect” than the toy sample, which is what I would expect from a real intrusion detection benchmark. They show the difficulty of anomaly detection on mixed traffic and make the project more credible than a toy-only example.
 
-Ensemble confusion matrix:
+## Visuals
 
-![Confusion matrix](assets/ensemble_confusion_matrix_sample.png)
+Sample labeled dataset visuals:
+
+![Feature scatter sample](assets/feature_scatter_sample.png)
+
+![Method comparison sample](assets/method_comparison_sample.png)
+
+![Sample confusion matrix](assets/ensemble_confusion_matrix_sample.png)
+
+UNSW-NB15 subset visuals:
+
+![UNSW feature scatter](assets/unsw_feature_scatter.png)
+
+![UNSW method comparison](assets/unsw_method_comparison.png)
+
+![UNSW confusion matrix](assets/unsw_ensemble_confusion_matrix.png)
 
 ## Notebook
 
-The repository includes `notebooks/network_anomaly_analysis.ipynb` for a lightweight exploratory analysis workflow. It uses the labeled sample dataset and can be extended later for public benchmark datasets.
+The repository includes `notebooks/network_anomaly_analysis.ipynb` for a lightweight exploratory analysis workflow. It can be extended later for larger public benchmark datasets.
 
 ## Real Dataset Notes
 
-The repository includes `docs/real_dataset_guide.md` and `prepare_unsw_nb15.py` to convert the official `UNSW-NB15` train and test CSV files into a smaller subset for experimentation.
+The repository includes `docs/real_dataset_guide.md` and `prepare_unsw_nb15.py` to convert the official `UNSW-NB15` train and test CSV files, or a public mirror of the dataset, into a smaller subset for experimentation.
 
 Official dataset pages:
 
@@ -145,15 +184,17 @@ Official dataset pages:
 
 ## Limitations
 
-- the included datasets are small and intended for demonstration
+- the included UNSW subset is intentionally smaller than the full benchmark
 - results are sensitive to feature selection and model parameters
 - unsupervised methods can still produce false positives on borderline traffic patterns
+- the current ensemble uses a simple vote rather than tuned model calibration
 
 ## Next Steps
 
-- run the pipeline on the official `UNSW-NB15` data
-- add a short notebook for exploratory analysis
-- include confusion matrices and parameter sensitivity checks
+- compare against supervised baselines on labeled public data
+- add parameter sensitivity experiments
+- test on a second benchmark such as `CIC-IDS2017`
+- explore feature engineering and dimensionality reduction
 
 ## License
 

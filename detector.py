@@ -319,8 +319,12 @@ def print_summary(report: pd.DataFrame, numeric_columns: List[str], metrics: Dic
         print("No anomalies were found.")
     else:
         print("\nFlagged rows:")
-        for _, row in anomaly_rows.iterrows():
+        preview_rows = anomaly_rows.head(25)
+        for _, row in preview_rows.iterrows():
             print(f"  - row {int(row['row_id'])}: {row['anomaly_reason']}")
+        remaining = len(anomaly_rows) - len(preview_rows)
+        if remaining > 0:
+            print(f"  - ... {remaining} additional flagged rows omitted from console output")
 
     if metrics:
         best_method = max(metrics.items(), key=lambda item: item[1]["f1_score"])
