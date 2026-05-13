@@ -21,6 +21,8 @@ For this project, `UNSW-NB15` is the best next step because:
 3. Run the preparation script in this repository
 4. Run the detector against the prepared subset
 
+If you want a faster setup path, the repository also supports a public Hugging Face mirror of the dataset through the `--hf-dataset` option.
+
 ## Prepare a Portfolio-Friendly Subset
 
 Example command:
@@ -29,6 +31,13 @@ Example command:
 python prepare_unsw_nb15.py `
   --train "C:\path\to\UNSW_NB15_training-set.csv" `
   --test "C:\path\to\UNSW_NB15_testing-set.csv"
+```
+
+Alternative using a public mirror:
+
+```powershell
+python -m pip install datasets pyarrow
+python prepare_unsw_nb15.py --hf-dataset Mouwiya/UNSW-NB15 --output data/unsw_nb15_public_subset.csv --rows-per-class 3000
 ```
 
 This creates:
