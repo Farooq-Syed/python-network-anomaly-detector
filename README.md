@@ -1,5 +1,9 @@
 # Python-Based Network Anomaly Detector
 
+[![CI](https://github.com/Farooq-Syed/python-network-anomaly-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Farooq-Syed/python-network-anomaly-detector/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
 ## Results at a glance
@@ -83,6 +87,13 @@ Run the labeled sample with evaluation:
 
 ```powershell
 python detector.py --input data/labeled_research_sample.csv --label-column label
+```
+
+Run the supervised baseline to see how much the labels are worth (this is the
+`supervised_vs_unsupervised` comparison used in the paper):
+
+```powershell
+python supervised_baseline.py --input data/unsw_nb15_public_subset.csv --label-column label
 ```
 
 Prepare a subset from official `UNSW-NB15` train and test CSV files:

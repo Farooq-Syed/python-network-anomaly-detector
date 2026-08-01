@@ -1,6 +1,10 @@
 # An Ensemble of Statistical and Unsupervised Detectors for Network Traffic Anomalies
 
-*A project write-up. Syed, 2026.*
+**Farooq Syed** · M.S. in Computer and Information Security Systems, Eastern Illinois University · 2026
+
+*Independent research portfolio, prepared as part of a PhD application in cybersecurity.
+Developed with AI coding assistance; all methods, experiments, and findings were
+directed, reviewed, and verified by the author.*
 
 ## Abstract
 
@@ -16,8 +20,12 @@ toy dataset scoring perfectly. During this pass I found and fixed a silent
 label-leakage defect in which a numeric ground-truth column was admitted as an input
 feature whenever the user did not explicitly name it, and I documented — via a test
 that initially failed — the outlier self-masking behavior of the z-score method,
-which is precisely the failure mode the ensemble exists to cover. Test coverage rose
-from one smoke test to eleven, with the reported metrics unchanged.
+which is precisely the failure mode the ensemble exists to cover. To frame the
+unsupervised results, a supervised baseline (logistic regression and random forest,
+cross-validated with scaling confined to each training fold) reaches F1 ≈ 0.99 on the
+same subset — roughly +0.73 over the unsupervised ensemble — quantifying the value of
+labels and locating the difficulty in the learning setting rather than the data. Test
+coverage rose from one smoke test to fourteen, with the reported metrics unchanged.
 
 ## 1. Introduction
 
@@ -99,7 +107,46 @@ unsupervised anomaly detection on heterogeneous traffic, where attack flows are 
 uniformly "extreme," is genuinely difficult, and a pipeline that reports these
 numbers honestly is more credible than one that only ever shows a perfect toy.
 
-## 6. A documented limitation: z-score self-masking
+## 6. How much do the labels buy you? A supervised baseline
+
+The natural question raised by the modest unsupervised numbers is whether the
+difficulty lies in the *data* or in the *absence of labels*. To separate the two, a
+supervised baseline (`supervised_baseline.py`) trains two standard classifiers —
+L2-regularized logistic regression and a random forest — on the same 6,000-row
+UNSW-NB15 subset, under the same 5-fold stratified cross-validation used everywhere
+else. Crucially, feature scaling for the logistic model is placed inside a
+scikit-learn `Pipeline`, so the scaler is fit within each training fold only and
+never observes held-out rows; this keeps the cross-validated estimate free of the
+leakage the main tool's own audit was concerned with.
+
+The gap is dramatic:
+
+| Approach                         | Precision | Recall | F1   | ROC-AUC |
+|----------------------------------|:---------:|:------:|:----:|:-------:|
+| Unsupervised ensemble (§5)       |   0.58    |  0.18  | 0.27 |    —    |
+| Logistic regression (supervised) |   0.99    |  1.00  | 0.996|  0.997  |
+| Random forest (supervised)       |   0.99    |  1.00  | 0.995|  0.999  |
+
+![Supervised vs. unsupervised](assets/supervised_vs_unsupervised.png)
+
+Both supervised models reach F1 ≈ 0.99, an improvement of roughly **+0.73 F1** over
+the best unsupervised configuration. The interpretation matters. It is not that the
+unsupervised detectors are poorly implemented; it is that UNSW-NB15 attack flows are
+*not* uniformly outliers — many sit inside the bulk of normal traffic and are
+separable only along combinations of features that distinguish attack from benign,
+which is exactly the structure a labeled classifier can learn and an unsupervised
+"find the unusual points" method cannot. The near-perfect supervised result also
+confirms the features carry ample signal, so the unsupervised shortfall is a property
+of the learning setting, not of impoverished data.
+
+This has a concrete operational reading for intrusion detection: where labeled attack
+data exists, supervised classification is vastly preferable; unsupervised methods earn
+their place only where labels are unavailable or where the goal is catching novel
+behavior no labeled set covers. Framing the unsupervised ensemble against this ceiling
+is more honest than presenting it in isolation, and it sets up the obvious research
+direction — semi-supervised methods that exploit a small number of labels.
+
+## 7. A documented limitation: z-score self-masking
 
 Writing a unit test for the z-score detector surfaced a subtle property. A test that
 placed a single extreme value (500) among a tight cluster (`[10, 11, 9, 10, 500]`)
@@ -113,7 +160,7 @@ discard the failing test, the behavior is now pinned by two tests — one with a
 outlier that is correctly flagged, and one asserting the self-masking case — with the
 limitation documented in the code.
 
-## 7. Limitations
+## 8. Limitations
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; no
   supervised baseline is included for comparison.
@@ -122,14 +169,14 @@ limitation documented in the code.
 - The ensemble is an unweighted vote, not a calibrated combiner.
 - Only one public benchmark subset is evaluated.
 
-## 8. Future work
+## 9. Future work
 
 A supervised baseline on the labeled UNSW subset would frame just how much the
 unsupervised methods leave on the table. A second benchmark such as CIC-IDS2017 would
 test generalization. Feature engineering and dimensionality reduction, and a
 correlation-aware leakage check, are natural refinements.
 
-## 9. Conclusion
+## 10. Conclusion
 
 The detectors here are standard; the project's worth is in evaluating them honestly on
 a real benchmark and in the discipline of the cleanup. Fixing a label-leakage defect
