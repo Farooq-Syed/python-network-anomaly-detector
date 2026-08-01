@@ -96,6 +96,13 @@ Run the supervised baseline to see how much the labels are worth (this is the
 python supervised_baseline.py --input data/unsw_nb15_public_subset.csv --label-column label
 ```
 
+Run the label-budget experiment (how few labels are needed, and whether
+self-training over the unlabeled remainder helps):
+
+```powershell
+python label_budget_experiment.py --input data/unsw_nb15_public_subset.csv --label-column label
+```
+
 Prepare a subset from official `UNSW-NB15` train and test CSV files:
 
 ```powershell
@@ -211,9 +218,13 @@ Official dataset pages:
 
 ## Next Steps
 
-- compare against supervised baselines on labeled public data
+- ~~compare against supervised baselines on labeled public data~~ — done
+  (`supervised_baseline.py`, +0.73 F1 over the unsupervised ensemble)
+- ~~quantify the semi-supervised label budget~~ — done
+  (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) §7)
+- test on a second benchmark such as `CIC-IDS2017` to see whether the label-budget
+  knee shifts on harder attacks
 - add parameter sensitivity experiments
-- test on a second benchmark such as `CIC-IDS2017`
 - explore feature engineering and dimensionality reduction
 
 ## License

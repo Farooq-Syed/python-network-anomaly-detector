@@ -24,8 +24,11 @@ which is precisely the failure mode the ensemble exists to cover. To frame the
 unsupervised results, a supervised baseline (logistic regression and random forest,
 cross-validated with scaling confined to each training fold) reaches F1 ≈ 0.99 on the
 same subset — roughly +0.73 over the unsupervised ensemble — quantifying the value of
-labels and locating the difficulty in the learning setting rather than the data. Test
-coverage rose from one smoke test to fourteen, with the reported metrics unchanged.
+labels and locating the difficulty in the learning setting rather than the data. A
+label-budget experiment then shows almost that entire gap closes with only a few dozen
+labels, and that self-training over the unlabeled remainder helps only in the narrow
+regime where labels are scarcest. Test coverage rose from one smoke test to eighteen,
+with the reported metrics unchanged.
 
 ## 1. Introduction
 
@@ -146,7 +149,48 @@ behavior no labeled set covers. Framing the unsupervised ensemble against this c
 is more honest than presenting it in isolation, and it sets up the obvious research
 direction — semi-supervised methods that exploit a small number of labels.
 
-## 7. A documented limitation: z-score self-masking
+## 7. How many labels are actually needed? A label-budget experiment
+
+The +0.73 gap between unsupervised and fully supervised detection is only useful if
+the labels required to close it are affordable, since labeling attack traffic is
+expensive. `label_budget_experiment.py` asks how small that label budget can be. It
+sweeps the fraction of training rows that keep their labels (from 0.2% to 100%) and,
+at each budget, compares two approaches under the same 5-fold cross-validation:
+a purely supervised model trained on only the labeled subset, and a self-training
+model (scikit-learn's `SelfTrainingClassifier`) that additionally pseudo-labels the
+unlabeled remainder. Within each fold, only training rows are ever unlabeled, and
+scaling stays inside the pipeline, so the held-out test rows are never seen.
+
+The result is striking, and not the one I expected:
+
+| Labeled rows (approx.) | Supervised F1 | Self-training F1 |
+|:----------------------:|:-------------:|:----------------:|
+| 10                     |     0.84      |      0.87        |
+| 24                     |     0.92      |      0.95        |
+| 48                     |     0.98      |      0.99        |
+| 240                    |     0.99      |      0.99        |
+| 4,800 (full)           |     0.996     |      0.996       |
+
+![Label-budget curve](assets/label_budget_curve.png)
+
+Two things stand out. First, **almost the entire 0.27 → 0.99 gap closes with on the
+order of a few dozen labels**: at roughly 48 labeled flows the supervised model is
+already at F1 ≈ 0.98, and past a few hundred the curve is flat. For this benchmark,
+labels are decisive but not expensive. Second, **self-training helps only in the
+narrow regime where labels are scarcest** — it adds about +0.03 F1 at ten labels and
++0.026 at twenty-four, then its advantage vanishes once the supervised model alone has
+enough labeled data to separate the classes. This is the honest, slightly deflating
+version of the semi-supervised story: the unlabeled data is genuinely useful, but only
+in a small window, because UNSW-NB15's classes become easy to separate as soon as a
+handful of labels anchor the boundary.
+
+The methodological caveat is that this generalizes only as far as the dataset does.
+UNSW-NB15's attack and benign flows are ultimately well separated in feature space; a
+benchmark with subtler or more adversarial attacks would likely push the knee of this
+curve rightward and give self-training a larger, more durable advantage. That
+comparison across benchmarks is the natural continuation of this experiment.
+
+## 8. A documented limitation: z-score self-masking
 
 Writing a unit test for the z-score detector surfaced a subtle property. A test that
 placed a single extreme value (500) among a tight cluster (`[10, 11, 9, 10, 500]`)
@@ -160,7 +204,7 @@ discard the failing test, the behavior is now pinned by two tests — one with a
 outlier that is correctly flagged, and one asserting the self-masking case — with the
 limitation documented in the code.
 
-## 8. Limitations
+## 9. Limitations
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; no
   supervised baseline is included for comparison.
@@ -169,14 +213,14 @@ limitation documented in the code.
 - The ensemble is an unweighted vote, not a calibrated combiner.
 - Only one public benchmark subset is evaluated.
 
-## 9. Future work
+## 10. Future work
 
 A supervised baseline on the labeled UNSW subset would frame just how much the
 unsupervised methods leave on the table. A second benchmark such as CIC-IDS2017 would
 test generalization. Feature engineering and dimensionality reduction, and a
 correlation-aware leakage check, are natural refinements.
 
-## 10. Conclusion
+## 11. Conclusion
 
 The detectors here are standard; the project's worth is in evaluating them honestly on
 a real benchmark and in the discipline of the cleanup. Fixing a label-leakage defect
