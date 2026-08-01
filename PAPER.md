@@ -204,23 +204,49 @@ discard the failing test, the behavior is now pinned by two tests — one with a
 outlier that is correctly flagged, and one asserting the self-masking case — with the
 limitation documented in the code.
 
-## 9. Limitations
+## 9. Relation to prior work
 
-- Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; no
-  supervised baseline is included for comparison.
+This project uses established methods on an established benchmark rather than proposing
+new ones. Isolation Forest, Local Outlier Factor, and One-Class SVM are standard
+unsupervised anomaly detectors; combining detectors by vote is common practice. The
+evaluation dataset, UNSW-NB15, is a widely used network intrusion detection benchmark
+released by UNSW Canberra, and CIC-IDS2017 (referenced as future work) is another. The
+published literature on these benchmarks reports a wide range of results depending on
+the feature set, the size of the subset, and — critically — whether the method is
+supervised; supervised classifiers routinely reach high F1 on UNSW-NB15, which is
+consistent with the ~0.99 supervised baseline measured here, while unsupervised
+results are typically far lower, consistent with the ~0.27 ensemble here.
+
+Specific published figures are deliberately not quoted in this write-up: they vary
+substantially across papers and subsets, and citing exact numbers without reproducing
+them on the identical subset would be misleading. The honest comparison this project
+does offer is internal and reproducible — unsupervised, supervised, and
+label-budgeted results measured under one cross-validation protocol on one subset —
+which is a stronger basis for its claims than an unverified comparison to numbers from
+another setup. A like-for-like comparison against a published pipeline on the same
+subset is the correct next step and is left as future work.
+
+## 10. Limitations
+
+- Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; they are
+  best read against the supervised and label-budget results in §6–§7 rather than in
+  isolation.
 - The leakage guard matches on column name and would miss an unconventionally named
   label.
 - The ensemble is an unweighted vote, not a calibrated combiner.
-- Only one public benchmark subset is evaluated.
+- Only one public benchmark subset is evaluated; the label-budget knee in particular
+  may shift on a harder benchmark.
 
-## 10. Future work
+## 11. Future work
 
-A supervised baseline on the labeled UNSW subset would frame just how much the
-unsupervised methods leave on the table. A second benchmark such as CIC-IDS2017 would
-test generalization. Feature engineering and dimensionality reduction, and a
-correlation-aware leakage check, are natural refinements.
+The label-budget result (§7) points directly at semi-supervised and active-learning
+methods that spend a small label budget where it helps most. A second benchmark such
+as CIC-IDS2017 would test whether the near-perfect supervised result and the shallow
+label-budget knee generalize or are specific to UNSW-NB15. Feature engineering,
+dimensionality reduction, a calibrated ensemble combiner, and a correlation-aware
+leakage check are further refinements.
 
-## 11. Conclusion
+## 12. Conclusion
 
 The detectors here are standard; the project's worth is in evaluating them honestly on
 a real benchmark and in the discipline of the cleanup. Fixing a label-leakage defect
