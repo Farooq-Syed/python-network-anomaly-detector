@@ -2,6 +2,15 @@
 
 This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
+## Results at a glance
+
+![Results panel](assets/results_panel.png)
+
+Four detectors vote on each flow. Evaluated on a 6,000-row UNSW-NB15 subset, no method
+exceeds F1 = 0.30 — the honest, unglamorous reality of unsupervised detection on mixed
+traffic, and more credible than a toy that scores perfectly. See [PAPER.md](PAPER.md)
+for the method and [JOURNAL.md](JOURNAL.md) for the development notes.
+
 The pipeline compares four detectors:
 
 - `Z-score`

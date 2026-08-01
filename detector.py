@@ -14,10 +14,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 from typing import Dict, List
 
-import matplotlib.pyplot as plt
+import matplotlib
+
+# Choose a non-interactive backend before importing pyplot so the tool can render
+# plots on a headless machine or in CI without a display.
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
@@ -81,10 +87,37 @@ def normalize_label(value: object) -> int:
     raise ValueError(f"Unsupported label value: {value}")
 
 
+# Column names that almost always hold a ground-truth label rather than a feature.
+# These are excluded from the feature set even when the user does not name one as the
+# evaluation label, to avoid training the unsupervised detectors on the answer.
+LIKELY_LABEL_COLUMNS = {"label", "attack", "attack_cat", "class", "target",
+                        "is_anomaly", "ground_truth", "y"}
+
+
 def select_numeric_columns(dataframe: pd.DataFrame, label_column: str | None) -> List[str]:
     numeric_columns = dataframe.select_dtypes(include=["number"]).columns.tolist()
+
     if label_column and label_column in numeric_columns:
         numeric_columns.remove(label_column)
+
+    # Guard against silent label leakage: if a column that looks like a label is
+    # still in the feature set (because the user didn't pass --label-column), drop
+    # it and say so. A numeric 0/1 label left in as a feature hands the detectors
+    # the ground truth and quietly inflates results.
+    leaked = [
+        column
+        for column in list(numeric_columns)
+        if column != label_column and column.lower() in LIKELY_LABEL_COLUMNS
+    ]
+    for column in leaked:
+        numeric_columns.remove(column)
+    if leaked:
+        warnings.warn(
+            "Excluded likely label column(s) from features to avoid leakage: "
+            f"{leaked}. Pass --label-column to use one for evaluation.",
+            stacklevel=2,
+        )
+
     if not numeric_columns:
         raise ValueError("No numeric columns were found in the input data.")
     return numeric_columns
