@@ -27,11 +27,14 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 ## Features
 
 - CSV-based workflow for traffic or flow records
-- automatic numeric feature selection
+- automatic numeric feature selection with a label-leakage guard
 - comparison across multiple anomaly detection methods
 - optional evaluation with labeled data
 - exported reports, metrics, and plots
 - reproducible UNSW-NB15 subset preparation
+- schema-aware loader for CIC-IDS2017-style data
+- optional per-source time-window aggregation (`--window-minutes`)
+- supervised baseline, label-budget, and active-learning experiments
 
 ## Project Structure
 
@@ -101,6 +104,27 @@ self-training over the unlabeled remainder helps):
 
 ```powershell
 python label_budget_experiment.py --input data/unsw_nb15_public_subset.csv --label-column label
+```
+
+Run the active-learning experiment (does choosing *which* rows to label beat random
+labeling under a fixed budget?):
+
+```powershell
+python active_learning_experiment.py --input data/unsw_nb15_public_subset.csv --label-column label
+```
+
+Compare unsupervised vs. supervised detection on a different benchmark schema (a
+synthetic CIC-IDS2017-style sample ships with the repo; point `--input` at a real
+CIC-IDS2017 CSV to run the full dataset):
+
+```powershell
+python benchmark_compare.py --input data/sample_cic_ids2017_style.csv
+```
+
+Aggregate flows into per-source time windows before detection:
+
+```powershell
+python detector.py --input data/sample_network_traffic.csv --window-minutes 30
 ```
 
 Prepare a subset from official `UNSW-NB15` train and test CSV files:
@@ -218,12 +242,14 @@ Official dataset pages:
 
 ## Next Steps
 
-- ~~compare against supervised baselines on labeled public data~~ — done
+- ~~compare against supervised baselines on labeled public data~~ - done
   (`supervised_baseline.py`, +0.73 F1 over the unsupervised ensemble)
-- ~~quantify the semi-supervised label budget~~ — done
-  (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) §7)
-- test on a second benchmark such as `CIC-IDS2017` to see whether the label-budget
-  knee shifts on harder attacks
+- ~~quantify the semi-supervised label budget~~ - done
+  (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) 7)
+- ~~compare random vs. uncertainty sampling under a fixed label budget~~ - done
+  (`active_learning_experiment.py`; on this benchmark, query strategy barely matters)
+- run the random-vs-uncertainty comparison on a harder benchmark (real CIC-IDS2017)
+  where the classes overlap more - the schema-aware loader makes this one command
 - add parameter sensitivity experiments
 - explore feature engineering and dimensionality reduction
 

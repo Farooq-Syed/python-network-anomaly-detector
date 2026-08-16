@@ -65,6 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed for reproducible results.",
     )
+    parser.add_argument(
+        "--window-minutes",
+        type=int,
+        default=0,
+        help="If > 0, aggregate flows into time windows per source before detection.",
+    )
+    parser.add_argument(
+        "--source-column",
+        default="source_ip",
+        help="Column identifying the traffic source, used by time-window aggregation.",
+    )
     return parser
 
 
@@ -127,6 +138,83 @@ def scale_features(dataframe: pd.DataFrame, numeric_columns: List[str]) -> pd.Da
     scaler = StandardScaler()
     scaled = scaler.fit_transform(dataframe[numeric_columns].astype(float))
     return pd.DataFrame(scaled, columns=numeric_columns, index=dataframe.index)
+
+
+def detect_benchmark_schema(dataframe: pd.DataFrame) -> str:
+    """Identify which public benchmark a dataframe looks like, by column names.
+
+    Returns "cic-ids2017" for the CIC-IDS2017 column vocabulary, "unsw-nb15" for
+    the UNSW-NB15 one, and "generic" otherwise. This lets the same pipeline consume
+    a second benchmark without a format switch in the calling code.
+    """
+    columns = set(dataframe.columns)
+    if "Flow Duration" in columns or "Flow ID" in columns or "Label" in columns and "Total Fwd Packets" in columns:
+        return "cic-ids2017"
+    if "srcip" in columns or "sport" in columns:
+        return "unsw-nb15"
+    return "generic"
+
+
+def prepare_benchmark(path: Path, label_column: str | None = None):
+    """Load a public benchmark file and return features, labels, and its schema.
+
+    For CIC-IDS2017 the label columns are the string "Label"/"Label2" columns, so
+    any non-"BENIGN" value is treated as attack and the numeric columns become the
+    features. For UNSW-NB15 (and generic CSV) the label handling reuses the main
+    tool's leakage-aware numeric selection and normalize_label.
+    """
+    dataframe = pd.read_csv(path)
+    schema = detect_benchmark_schema(dataframe)
+
+    if schema == "cic-ids2017":
+        numeric_columns = dataframe.select_dtypes(include=["number"]).columns.tolist()
+        if not numeric_columns:
+            raise ValueError("No numeric feature columns were found in the CIC-IDS2017 data.")
+        label_name = "Label" if "Label" in dataframe.columns else "Label2"
+        if label_name not in dataframe.columns:
+            raise ValueError("No label column ('Label'/'Label2') was found in the CIC-IDS2017 data.")
+        truth = dataframe[label_name].apply(
+            lambda value: 0 if str(value).strip().lower() == "benign" else 1
+        ).to_numpy(dtype=int)
+        features = dataframe[numeric_columns]
+        return features, truth, schema
+
+    if label_column is None:
+        label_column = "label"
+    if label_column not in dataframe.columns:
+        raise ValueError(f"Label column '{label_column}' was not found in the data.")
+    numeric_columns = select_numeric_columns(dataframe, label_column)
+    truth = dataframe[label_column].apply(normalize_label).to_numpy(dtype=int)
+    return dataframe[numeric_columns], truth, schema
+
+
+def aggregate_by_time_window(dataframe: pd.DataFrame, source_column: str, window_minutes: int) -> pd.DataFrame:
+    """Bucket flows into fixed time windows per source and aggregate the numeric fields.
+
+    Turns a flow-level frame into a window-level frame so the detectors can work on
+    per-source behavior over time instead of isolated rows. Each output row is one
+    (source, window) pair; the timestamp column is the window's start and numeric
+    columns are aggregated with mean, sum, and count.
+    """
+    if source_column not in dataframe.columns:
+        raise ValueError(f"Source column '{source_column}' was not found in the data.")
+    frame = dataframe.copy()
+    frame["event_time"] = pd.to_datetime(frame["timestamp"], errors="coerce")
+    frame = frame.dropna(subset=["event_time"])
+    if frame.empty:
+        raise ValueError("No rows with parseable timestamps remained after time-window aggregation.")
+
+    numeric_columns = frame.select_dtypes(include=["number"]).columns.tolist()
+    frame["window_bucket"] = frame["event_time"].dt.floor(f"{window_minutes}min")
+
+    grouped = (
+        frame.groupby([source_column, "window_bucket"])[numeric_columns]
+        .agg(["mean", "sum", "count"])
+    )
+    grouped.columns = ["_".join(part).rstrip("_") for part in grouped.columns.values]
+    grouped = grouped.reset_index()
+    grouped = grouped.rename(columns={"window_bucket": "timestamp"})
+    return grouped
 
 
 def compute_z_score_method(dataframe: pd.DataFrame, numeric_columns: List[str], threshold: float) -> pd.DataFrame:
@@ -379,6 +467,8 @@ def main() -> None:
     plot_dir = Path(args.plot_dir)
 
     dataframe = load_dataset(input_path)
+    if args.window_minutes > 0:
+        dataframe = aggregate_by_time_window(dataframe, args.source_column, args.window_minutes)
     numeric_columns = select_numeric_columns(dataframe, args.label_column)
     report = build_report(
         dataframe,

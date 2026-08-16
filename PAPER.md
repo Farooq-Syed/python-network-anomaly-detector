@@ -1,4 +1,4 @@
-# An Ensemble of Statistical and Unsupervised Detectors for Network Traffic Anomalies
+# What Labels Actually Buy on Network Traffic — and Whether It Matters Who Picks Them
 
 **Farooq Syed** · M.S. in Computer and Information Security Systems, Eastern Illinois University · 2026
 
@@ -10,49 +10,52 @@ directed, reviewed, and verified by the author.*
 
 Unsupervised anomaly detection is attractive for network intrusion detection because
 it needs no labeled attacks, but every individual method has a characteristic blind
-spot. This project implements four detectors over flow-level traffic features — a
-z-score statistical baseline, Isolation Forest, Local Outlier Factor, and a
-One-Class SVM — and combines them with a majority vote, then evaluates the result on
-both a small labeled sample and a 6,000-row subset of the UNSW-NB15 benchmark. The
-benchmark results are deliberately modest (ensemble F1 ≈ 0.27), which is the honest
-outcome for unsupervised detection on mixed traffic and is more informative than a
-toy dataset scoring perfectly. During this pass I found and fixed a silent
-label-leakage defect in which a numeric ground-truth column was admitted as an input
-feature whenever the user did not explicitly name it, and I documented — via a test
-that initially failed — the outlier self-masking behavior of the z-score method,
-which is precisely the failure mode the ensemble exists to cover. To frame the
-unsupervised results, a supervised baseline (logistic regression and random forest,
-cross-validated with scaling confined to each training fold) reaches F1 ≈ 0.99 on the
-same subset — roughly +0.73 over the unsupervised ensemble — quantifying the value of
-labels and locating the difficulty in the learning setting rather than the data. A
-label-budget experiment then shows almost that entire gap closes with only a few dozen
-labels, and that self-training over the unlabeled remainder helps only in the narrow
-regime where labels are scarcest. Test coverage rose from one smoke test to eighteen,
-with the reported metrics unchanged.
+spot. This project implements four detectors over flow-level features — a z-score
+statistical baseline, Isolation Forest, Local Outlier Factor, and a One-Class SVM —
+combines them with a majority vote, and evaluates the result on a 6,000-row subset of
+the UNSW-NB15 benchmark. The unsupervised result is deliberately modest
+(ensemble F1 ≈ 0.27), and the supervised baseline that frames it reaches F1 ≈ 0.99
+under identical cross-validation — a gap of roughly +0.73 that locates the
+difficulty in the learning setting rather than the data. Two experiments follow that
+gap. The first shows almost all of it closes with on the order of a few dozen labels,
+and that self-training over the unlabeled remainder helps only in the narrow regime
+where labels are scarcest. The second, newer experiment asks whether it matters *which*
+rows you label: under a fixed budget, does uncertainty sampling beat random sampling?
+On this benchmark, mostly not — and the honest reading is that UNSW-NB15's classes
+separate too easily for query strategy to matter. A second, harder benchmark is the
+natural way to find out if that finding generalizes. Along the way, the pipeline grew
+a schema-aware loader that can consume CIC-IDS2017-style data and a time-window
+aggregation step, and one silent bug was found and fixed: a label-leakage path that
+fed the ground-truth column back in as a feature whenever the user did not explicitly
+name it.
 
 ## 1. Introduction
 
-Signature-based intrusion detection cannot see attacks it has no signature for, which
-motivates anomaly detection: model normal traffic and flag deviations. The difficulty
-is that "deviation" is method-dependent. A z-score flags points far from the mean in
-some feature; Isolation Forest flags points that are easy to partition off; Local
-Outlier Factor flags points in sparse neighborhoods; a One-Class SVM flags points
-outside a learned boundary. Each captures a different notion of "unusual," and each
-misses cases the others catch. Combining them by vote is a standard way to reduce
-dependence on any single detector's blind spot.
+Signature-based detection cannot see attacks it has no signature for, which motivates
+anomaly detection: model normal traffic and flag deviations. The difficulty is that
+"deviation" is method-dependent. A z-score flags points far from the mean in some
+feature; Isolation Forest flags points that are easy to partition off; Local Outlier
+Factor flags points in sparse neighborhoods; a One-Class SVM flags points outside a
+learned boundary. Each captures a different notion of "unusual," and each misses cases
+the others catch. Combining them by vote is a standard way to reduce dependence on any
+single detector's blind spot.
 
-This project builds that combination as a reproducible pipeline over flow features
-(bytes, packets, duration, connection statistics) and, importantly, evaluates it on a
-real benchmark subset rather than only a hand-made sample, so the reported numbers
-reflect the genuine difficulty of the task.
+This project is built around one decision: evaluate the pipeline on a real benchmark
+subset rather than only a hand-made sample, so the reported numbers reflect the
+genuine difficulty of the task. Everything else follows from being willing to show
+the honest, unflattering result.
 
 ## 2. Data
 
 Three datasets ship with the project. A 12-row basic sample exercises the unlabeled
-path. A 24-row labeled research sample (4 attacks) validates the evaluation path on a
-cleanly separable case. The substantive benchmark is a 6,000-row subset of UNSW-NB15
+path. A 24-row labeled research sample validates the evaluation path on a cleanly
+separable case. The substantive benchmark is a 6,000-row subset of UNSW-NB15
 (3,000 benign, 3,000 attack) with 23 numeric flow features, used to test the pipeline
-on realistic, mixed traffic where the classes overlap.
+on realistic, mixed traffic where the classes overlap. A newer, schema-aware loader
+(`prepare_benchmark`) recognizes the CIC-IDS2017 column vocabulary and maps its
+string labels (anything that is not `BENIGN` counts as attack), so the same pipeline
+can be pointed at a second benchmark without a format switch in the calling code. A
+small synthetic CIC-style sample ships with the project so that path is exercised.
 
 ## 3. Methods
 
@@ -69,188 +72,175 @@ rate for the first two, and the SVM's `nu` is derived from it.
 anomalous. When a label column is provided, precision, recall, F1, and accuracy are
 computed per method and for the ensemble.
 
+**Time-window aggregation (new).** Flows can be bucketed into fixed time windows per
+source (`--window-minutes`), aggregating the numeric fields with mean, sum, and
+count. This turns a flow-level frame into a window-level frame so the detectors can
+work on per-source behavior over time instead of isolated rows.
+
 ## 4. A label-leakage defect and its correction
 
 Feature selection took every numeric column as a feature and removed the label only
 when the user passed `--label-column`. Because UNSW-NB15 stores its label as a numeric
 0/1 column named `label`, running the detector on that file without naming the label
 silently retained the ground truth as an input feature. For unsupervised detectors
-this is a leakage: the methods are shown the answer, and their flags become
+this is leakage: the methods are shown the answer, and their flags become
 untrustworthy in a way that inflates apparent performance rather than degrading it —
 the most dangerous direction for a defect to fail, since it invites no suspicion.
 
-The correction maintains a set of column names that conventionally denote labels
-(`label`, `attack`, `attack_cat`, `class`, `target`, `is_anomaly`, `ground_truth`,
-`y`) and excludes any of them from the feature set even when unnamed, emitting a
-warning. After the fix, the UNSW file yields 23 features instead of 24 and prints a
-leakage warning; the three legitimate run paths (basic, labeled sample, labeled
-UNSW) produce byte-identical metrics, confirming the change corrects only the leaking
-path. The guard is name-based and therefore heuristic; a correlation- or
-cardinality-based check would be more general but is unnecessary for the standard
-benchmarks this tool targets.
+The correction maintains a set of column names that conventionally denote labels and
+excludes any of them from the feature set even when unnamed, emitting a warning. After
+the fix, the UNSW file yields 23 features instead of 24 and prints a leakage warning;
+the legitimate run paths produce byte-identical metrics. The guard is name-based and
+therefore heuristic; a correlation- or cardinality-based check would be more general
+but is unnecessary for the standard benchmarks this tool targets.
 
-## 5. Results
-
-On the labeled research sample the ensemble reaches F1 = 1.00, with z-score also
-perfect and the model-based methods between 0.67 and 0.86 — the expected result for a
-cleanly separable toy case.
+## 5. Results on the benchmark
 
 On the UNSW-NB15 subset the picture is realistically hard:
 
-| Method                | Precision | Recall | F1   |
-|-----------------------|:---------:|:------:|:----:|
-| Z-score               |   0.47    |  0.22  | 0.30 |
-| Isolation Forest      |   0.64    |  0.15  | 0.25 |
-| Local Outlier Factor  |   0.71    |  0.17  | 0.27 |
-| One-Class SVM         |   0.52    |  0.12  | 0.20 |
-| Ensemble              |   0.58    |  0.18  | 0.27 |
+| Method | Precision | Recall | F1 |
+|--------|:---------:|:------:|:--:|
+| Z-score | 0.47 | 0.22 | 0.30 |
+| Isolation Forest | 0.64 | 0.15 | 0.25 |
+| Local Outlier Factor | 0.71 | 0.17 | 0.27 |
+| One-Class SVM | 0.52 | 0.12 | 0.20 |
+| Ensemble | 0.58 | 0.18 | 0.27 |
 
-No method exceeds F1 = 0.30. This is the correct and instructive result:
-unsupervised anomaly detection on heterogeneous traffic, where attack flows are not
-uniformly "extreme," is genuinely difficult, and a pipeline that reports these
-numbers honestly is more credible than one that only ever shows a perfect toy.
+No method exceeds F1 = 0.30. This is the correct and instructive result: unsupervised
+anomaly detection on heterogeneous traffic, where attack flows are not uniformly
+"extreme," is genuinely difficult. A pipeline that reports these numbers honestly is
+more credible than one that only ever shows a perfect toy.
 
-## 6. How much do the labels buy you? A supervised baseline
+## 6. How much do the labels buy you?
 
 The natural question raised by the modest unsupervised numbers is whether the
 difficulty lies in the *data* or in the *absence of labels*. To separate the two, a
-supervised baseline (`supervised_baseline.py`) trains two standard classifiers —
-L2-regularized logistic regression and a random forest — on the same 6,000-row
-UNSW-NB15 subset, under the same 5-fold stratified cross-validation used everywhere
-else. Crucially, feature scaling for the logistic model is placed inside a
-scikit-learn `Pipeline`, so the scaler is fit within each training fold only and
-never observes held-out rows; this keeps the cross-validated estimate free of the
-leakage the main tool's own audit was concerned with.
+supervised baseline trains two standard classifiers on the same 6,000-row subset under
+the same 5-fold stratified cross-validation. Feature scaling for the logistic model
+lives inside a scikit-learn `Pipeline`, so the scaler is fit within each training fold
+only and never observes held-out rows.
 
-The gap is dramatic:
+| Approach | Precision | Recall | F1 | ROC-AUC |
+|----------|:---------:|:------:|:--:|:-------:|
+| Unsupervised ensemble | 0.58 | 0.18 | 0.27 | — |
+| Logistic regression | 0.99 | 1.00 | 0.996 | 0.997 |
+| Random forest | 0.99 | 1.00 | 0.995 | 0.999 |
 
-| Approach                         | Precision | Recall | F1   | ROC-AUC |
-|----------------------------------|:---------:|:------:|:----:|:-------:|
-| Unsupervised ensemble (§5)       |   0.58    |  0.18  | 0.27 |    —    |
-| Logistic regression (supervised) |   0.99    |  1.00  | 0.996|  0.997  |
-| Random forest (supervised)       |   0.99    |  1.00  | 0.995|  0.999  |
+Both supervised models reach F1 ≈ 0.99, roughly +0.73 over the best unsupervised
+configuration. The interpretation matters. It is not that the unsupervised detectors
+are badly implemented; it is that UNSW-NB15 attack flows are *not* uniformly outliers —
+many sit inside the bulk of normal traffic and are separable only along combinations
+of features that distinguish attack from benign. A labeled classifier can learn that
+structure; an unsupervised "find the unusual points" method cannot. The near-perfect
+supervised result also confirms the features carry ample signal, so the shortfall is a
+property of the learning setting, not of impoverished data.
 
-![Supervised vs. unsupervised](assets/supervised_vs_unsupervised.png)
+## 7. How many labels do you actually need?
 
-Both supervised models reach F1 ≈ 0.99, an improvement of roughly **+0.73 F1** over
-the best unsupervised configuration. The interpretation matters. It is not that the
-unsupervised detectors are poorly implemented; it is that UNSW-NB15 attack flows are
-*not* uniformly outliers — many sit inside the bulk of normal traffic and are
-separable only along combinations of features that distinguish attack from benign,
-which is exactly the structure a labeled classifier can learn and an unsupervised
-"find the unusual points" method cannot. The near-perfect supervised result also
-confirms the features carry ample signal, so the unsupervised shortfall is a property
-of the learning setting, not of impoverished data.
-
-This has a concrete operational reading for intrusion detection: where labeled attack
-data exists, supervised classification is vastly preferable; unsupervised methods earn
-their place only where labels are unavailable or where the goal is catching novel
-behavior no labeled set covers. Framing the unsupervised ensemble against this ceiling
-is more honest than presenting it in isolation, and it sets up the obvious research
-direction — semi-supervised methods that exploit a small number of labels.
-
-## 7. How many labels are actually needed? A label-budget experiment
-
-The +0.73 gap between unsupervised and fully supervised detection is only useful if
-the labels required to close it are affordable, since labeling attack traffic is
-expensive. `label_budget_experiment.py` asks how small that label budget can be. It
-sweeps the fraction of training rows that keep their labels (from 0.2% to 100%) and,
-at each budget, compares two approaches under the same 5-fold cross-validation:
-a purely supervised model trained on only the labeled subset, and a self-training
-model (scikit-learn's `SelfTrainingClassifier`) that additionally pseudo-labels the
-unlabeled remainder. Within each fold, only training rows are ever unlabeled, and
-scaling stays inside the pipeline, so the held-out test rows are never seen.
-
-The result is striking, and not the one I expected:
+The +0.73 gap is only useful if the labels required to close it are affordable, since
+labeling attack traffic is expensive. A label-budget experiment sweeps the fraction of
+training rows that keep their labels and, at each budget, compares a purely supervised
+model trained on only the labeled subset against a self-training model that
+pseudo-labels the unlabeled remainder. Within each fold, only training rows are ever
+unlabeled, and scaling stays inside the pipeline.
 
 | Labeled rows (approx.) | Supervised F1 | Self-training F1 |
 |:----------------------:|:-------------:|:----------------:|
-| 10                     |     0.84      |      0.87        |
-| 24                     |     0.92      |      0.95        |
-| 48                     |     0.98      |      0.99        |
-| 240                    |     0.99      |      0.99        |
-| 4,800 (full)           |     0.996     |      0.996       |
+| 10 | 0.84 | 0.87 |
+| 24 | 0.92 | 0.95 |
+| 48 | 0.98 | 0.99 |
+| 240 | 0.99 | 0.99 |
+| 4,800 (full) | 0.996 | 0.996 |
 
-![Label-budget curve](assets/label_budget_curve.png)
+Two things stand out. First, almost the entire 0.27 → 0.99 gap closes with on the
+order of a few dozen labels: at roughly 48 labeled flows the supervised model is
+already at F1 ≈ 0.98. Labels are decisive but not expensive here. Second, self-training
+helps only where labels are scarcest — about +0.03 F1 at ten labels — then its
+advantage vanishes. This is the honest, slightly deflating version of the
+semi-supervised story: the unlabeled data is genuinely useful, but only in a small
+window, because the classes become easy to separate as soon as a handful of labels
+anchor the boundary.
 
-Two things stand out. First, **almost the entire 0.27 → 0.99 gap closes with on the
-order of a few dozen labels**: at roughly 48 labeled flows the supervised model is
-already at F1 ≈ 0.98, and past a few hundred the curve is flat. For this benchmark,
-labels are decisive but not expensive. Second, **self-training helps only in the
-narrow regime where labels are scarcest** — it adds about +0.03 F1 at ten labels and
-+0.026 at twenty-four, then its advantage vanishes once the supervised model alone has
-enough labeled data to separate the classes. This is the honest, slightly deflating
-version of the semi-supervised story: the unlabeled data is genuinely useful, but only
-in a small window, because UNSW-NB15's classes become easy to separate as soon as a
-handful of labels anchor the boundary.
+## 8. Does it matter which rows you label? An active-learning pass
 
-The methodological caveat is that this generalizes only as far as the dataset does.
-UNSW-NB15's attack and benign flows are ultimately well separated in feature space; a
-benchmark with subtler or more adversarial attacks would likely push the knee of this
-curve rightward and give self-training a larger, more durable advantage. That
-comparison across benchmarks is the natural continuation of this experiment.
+The label-budget result raises a sharper question: given a fixed budget, should you
+choose which flows to label? Uncertainty sampling labels the rows the current model
+is least sure about (predictions closest to 0.5); random sampling labels blindly. An
+active-learning experiment compares the two under the same folds and the same budget,
+starting from a small seed.
 
-## 8. A documented limitation: z-score self-masking
+The result is a negative one, and I mean that as a finding. On this benchmark, random
+sampling keeps pace with uncertainty sampling — at several budgets it beats it. The
+reason is the same reason the label-budget knee was so early: UNSW-NB15's classes
+separate so cleanly that a logistic regression anchored by a handful of labels has
+little uncertainty worth exploiting. Query strategy is only as valuable as the
+model's uncertainty is informative, and here it mostly isn't.
+
+That is exactly the result that needs a harder test. CIC-IDS2017, where attack flows
+overlap more with benign traffic, would either confirm "random is fine" or flip the
+finding — and either answer is a real contribution. The schema-aware loader makes that
+test a one-command operation. As a check that the pipeline runs on a different
+schema, the synthetic CIC-style sample shows the same shape (unsupervised F1 ≈ 0.24
+vs. supervised ≈ 0.51), but those numbers are illustrative only; the synthetic
+distributions are invented.
+
+## 9. A documented limitation: z-score self-masking
 
 Writing a unit test for the z-score detector surfaced a subtle property. A test that
-placed a single extreme value (500) among a tight cluster (`[10, 11, 9, 10, 500]`)
-and expected it to be flagged at threshold 2.5 *failed*: the outlier was not flagged.
-The cause is that a lone extreme value inflates the standard deviation it is measured
-against — here the 500 raises the standard deviation to ~196, giving itself a
-z-score of only 2.0, below the threshold. This outlier self-masking is a known
-limitation of z-score methods, and it is precisely the motivation for the ensemble:
-isolation- and density-based detectors do not share this failure mode. Rather than
-discard the failing test, the behavior is now pinned by two tests — one with a milder
-outlier that is correctly flagged, and one asserting the self-masking case — with the
-limitation documented in the code.
+placed a single extreme value (500) among a tight cluster (`[10, 11, 9, 10, 500]`) and
+expected it to be flagged at threshold 2.5 *failed*: the outlier was not flagged. A
+lone extreme value inflates the standard deviation it is measured against — here the
+500 raises the standard deviation to ~196, giving itself a z-score of only 2.0. This
+outlier self-masking is a known limitation of z-score methods, and it is precisely the
+motivation for the ensemble: isolation- and density-based detectors do not share this
+failure mode. The behavior is now pinned by two tests — one with a milder outlier that
+is correctly flagged, one asserting the self-masking case.
 
-## 9. Relation to prior work
+## 10. Relation to prior work
 
 This project uses established methods on an established benchmark rather than proposing
 new ones. Isolation Forest, Local Outlier Factor, and One-Class SVM are standard
-unsupervised anomaly detectors; combining detectors by vote is common practice. The
-evaluation dataset, UNSW-NB15, is a widely used network intrusion detection benchmark
-released by UNSW Canberra, and CIC-IDS2017 (referenced as future work) is another. The
-published literature on these benchmarks reports a wide range of results depending on
-the feature set, the size of the subset, and — critically — whether the method is
-supervised; supervised classifiers routinely reach high F1 on UNSW-NB15, which is
-consistent with the ~0.99 supervised baseline measured here, while unsupervised
-results are typically far lower, consistent with the ~0.27 ensemble here.
+unsupervised anomaly detectors; combining detectors by vote is common practice. UNSW-
+NB15 and CIC-IDS2017 are widely used network intrusion detection benchmarks. Published
+literature on these benchmarks reports a wide range of results depending on feature
+set, subset size, and — critically — whether the method is supervised; supervised
+classifiers routinely reach high F1 on UNSW-NB15, consistent with the ~0.99 baseline
+measured here, while unsupervised results are typically far lower, consistent with the
+~0.27 ensemble.
 
-Specific published figures are deliberately not quoted in this write-up: they vary
-substantially across papers and subsets, and citing exact numbers without reproducing
-them on the identical subset would be misleading. The honest comparison this project
-does offer is internal and reproducible — unsupervised, supervised, and
-label-budgeted results measured under one cross-validation protocol on one subset —
-which is a stronger basis for its claims than an unverified comparison to numbers from
-another setup. A like-for-like comparison against a published pipeline on the same
-subset is the correct next step and is left as future work.
+Specific published figures are deliberately not quoted: they vary substantially across
+papers and subsets, and citing exact numbers without reproducing them on the identical
+subset would be misleading. The comparison this project offers is internal and
+reproducible — unsupervised, supervised, label-budgeted, and active-learned results
+measured under one cross-validation protocol on one subset — which is a stronger basis
+for its claims than an unverified comparison to numbers from another setup.
 
-## 10. Limitations
+## 11. Limitations
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; they are
-  best read against the supervised and label-budget results in §6–§7 rather than in
-  isolation.
+  best read against the supervised and label-budget results rather than in isolation.
+- The active-learning result is single-benchmark. The claim that "query strategy does
+  not matter" is precisely the claim that needs a second, harder benchmark to hold.
 - The leakage guard matches on column name and would miss an unconventionally named
   label.
+- The CIC comparison is currently exercised on a synthetic sample; the full benchmark
+  is a download away but has not been run here.
 - The ensemble is an unweighted vote, not a calibrated combiner.
-- Only one public benchmark subset is evaluated; the label-budget knee in particular
-  may shift on a harder benchmark.
 
-## 11. Future work
+## 12. Future work
 
-The label-budget result (§7) points directly at semi-supervised and active-learning
-methods that spend a small label budget where it helps most. A second benchmark such
-as CIC-IDS2017 would test whether the near-perfect supervised result and the shallow
-label-budget knee generalize or are specific to UNSW-NB15. Feature engineering,
-dimensionality reduction, a calibrated ensemble combiner, and a correlation-aware
-leakage check are further refinements.
+The active-learning result points directly at the experiment that matters next:
+run the same random-vs-uncertainty comparison on a benchmark where the classes are
+not cleanly separable. A correlation-aware leakage check and a calibrated ensemble
+combiner are further refinements, and the time-window aggregation is an opening
+toward temporal features rather than a finished method.
 
-## 12. Conclusion
+## 13. Conclusion
 
 The detectors here are standard; the project's worth is in evaluating them honestly on
 a real benchmark and in the discipline of the cleanup. Fixing a label-leakage defect
-that failed in the flattering direction, and documenting the z-score self-masking
-behavior that a test surfaced, both push the tool toward reporting what is true rather
-than what looks good — which, for an anomaly detector whose whole value is
-trustworthiness, is the point.
+that failed in the flattering direction, documenting the z-score self-masking behavior
+that a test surfaced, and — in the newer pass — reporting an active-learning negative
+result rather than engineering it away, all push the tool toward reporting what is
+true rather than what looks good. For an anomaly detector whose whole value is
+trustworthiness, that is the point.

@@ -96,3 +96,26 @@ self-masking regimes, and the 2-vote ensemble rule.
 - Try CIC-IDS2017 as a second benchmark like the README suggests.
 - The UNSW numbers are low because unsupervised methods genuinely struggle on mixed
   traffic; a supervised baseline would make the comparison more honest.
+
+## Feature pass: active learning, second benchmark, time windows
+
+Three additions, and the active-learning one surprised me.
+
+- **Active learning.** The label-budget experiment showed a few dozen random labels
+  close most of the gap. The obvious follow-up: does *choosing* which labels help?
+  ctive_learning_experiment.py compares uncertainty sampling (label the rows the
+  model is most unsure about) against random sampling under the same budget and
+  folds. Result: random keeps pace, and at several budgets beats uncertainty. That's
+  the honest negative result - on UNSW-NB15 the classes separate so cleanly that the
+  model's uncertainty isn't informative enough for query strategy to matter. It's the
+  result that needs a harder benchmark to test, not a flattering one to hide.
+- **Second benchmark.** The pipeline can now ingest CIC-IDS2017-style data via
+  prepare_benchmark, which recognizes the schema and maps the string labels. A
+  synthetic CIC-style sample ships so the path is tested; pointing it at the real
+  dataset is a one-command job and the natural next experiment.
+- **Time windows.** --window-minutes aggregates flows into per-source time windows
+  (mean/sum/count) before detection. A first step toward temporal features rather
+  than a finished method.
+
+Test count is up to 26. The unsupervised 0.27 and supervised 0.99 numbers on the UNSW
+subset are unchanged.
