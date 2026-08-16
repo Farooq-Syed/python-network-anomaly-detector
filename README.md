@@ -61,7 +61,13 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 |   `-- network_anomaly_analysis.ipynb
 |-- results/
 |   |-- unsw_nb15_subset_metrics.json
-|   `-- unsw_nb15_subset_summary.json
+|   |-- unsw_nb15_subset_summary.json
+|   |-- supervised_metrics.json
+|   |-- label_budget_metrics.json
+|   |-- active_learning_metrics.json
+|   |-- unsw_benchmark_comparison.json
+|   |-- cic_benchmark_comparison.json
+|   `-- cic_active_learning_metrics.json
 `-- docs/
     `-- real_dataset_guide.md
 ```
@@ -72,7 +78,8 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 python -m pip install -r requirements.txt
 ```
 
-Optional, only if you want to pull the public Hugging Face mirror of `UNSW-NB15` directly:
+Optional, only if you want to pull the public Hugging Face mirrors of `UNSW-NB15` or
+`CIC-IDS2017` directly:
 
 ```powershell
 python -m pip install datasets pyarrow
@@ -113,12 +120,27 @@ labeling under a fixed budget?):
 python active_learning_experiment.py --input data/unsw_nb15_public_subset.csv --label-column label
 ```
 
-Compare unsupervised vs. supervised detection on a different benchmark schema (a
-synthetic CIC-IDS2017-style sample ships with the repo; point `--input` at a real
-CIC-IDS2017 CSV to run the full dataset):
+Compare unsupervised vs. supervised detection on the CIC-IDS2017 benchmark (a real
+12,000-row subset, prepared from the `bvsam/cic-ids-2017` mirror, ships in `data/`;
+a tiny synthetic CIC-style sample exercises the schema path too):
 
 ```powershell
+python benchmark_compare.py --input data/cic_ids2017_subset.csv --label-column Label
 python benchmark_compare.py --input data/sample_cic_ids2017_style.csv
+```
+
+Run the active-learning comparison on CIC-IDS2017 (the harder benchmark, where the
+query-strategy result flips), passing the measured supervised reference:
+
+```powershell
+python active_learning_experiment.py --input data/cic_ids2017_subset.csv --label-column Label --supervised-reference 0.966
+```
+
+Prepare a CIC-IDS2017 subset from the Hugging Face mirror or from local files:
+
+```powershell
+python prepare_cic_ids2017.py --rows-per-class 6000 --output data/cic_ids2017_subset.csv
+python prepare_cic_ids2017.py --files "C:\data\Wednesday-workingHours.pcap_ISCX.csv"
 ```
 
 Aggregate flows into per-source time windows before detection:
@@ -235,10 +257,12 @@ Official dataset pages:
 
 ## Limitations
 
-- the included UNSW subset is intentionally smaller than the full benchmark
+- the included UNSW and CIC subsets are intentionally smaller than the full benchmarks
 - results are sensitive to feature selection and model parameters
 - unsupervised methods can still produce false positives on borderline traffic patterns
 - the current ensemble uses a simple vote rather than tuned model calibration
+- the CIC subset is a balanced sample of four days' traffic, which underrepresents
+  long-tail attack families
 
 ## Next Steps
 
@@ -246,10 +270,12 @@ Official dataset pages:
   (`supervised_baseline.py`, +0.73 F1 over the unsupervised ensemble)
 - ~~quantify the semi-supervised label budget~~ - done
   (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) 7)
-- ~~compare random vs. uncertainty sampling under a fixed label budget~~ - done
-  (`active_learning_experiment.py`; on this benchmark, query strategy barely matters)
-- run the random-vs-uncertainty comparison on a harder benchmark (real CIC-IDS2017)
-  where the classes overlap more - the schema-aware loader makes this one command
+- ~~compare random vs. uncertainty sampling under a fixed label budget~~ - done on both
+  benchmarks (`active_learning_experiment.py`; on UNSW-NB15 uncertainty wins a
+  five-thousandths-of-F1 margin on a plateau, on CIC-IDS2017 random wins outright —
+  see [PAPER.md](PAPER.md) 8)
+- explain *why* the query-strategy effect flips sign between benchmarks (calibration?
+  labeling noise?) - the natural next experiment
 - add parameter sensitivity experiments
 - explore feature engineering and dimensionality reduction
 

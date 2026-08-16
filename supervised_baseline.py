@@ -26,6 +26,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -36,7 +37,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
+from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -79,17 +80,37 @@ def load_labeled(path: Path, label_column: str):
 
 
 def evaluate_model(name, model, features, truth, splitter) -> Dict[str, float]:
-    """Cross-validated metrics for one model, including ROC-AUC from probabilities."""
-    predictions = cross_val_predict(model, features, truth, cv=splitter, method="predict")
-    probabilities = cross_val_predict(
-        model, features, truth, cv=splitter, method="predict_proba"
-    )[:, 1]
+    """Cross-validated metrics for one model, with per-fold mean and spread.
+
+    Instead of pooling all out-of-fold predictions into one score, each fold is
+    scored separately so the result carries a spread across folds — a more honest
+    picture of how stable the number is than a single point estimate.
+    """
+    precisions: List[float] = []
+    recalls: List[float] = []
+    f1s: List[float] = []
+    accuracies: List[float] = []
+    aucs: List[float] = []
+    for train_idx, test_idx in splitter.split(features, truth):
+        model.fit(features.iloc[train_idx], truth.iloc[train_idx])
+        predicted = model.predict(features.iloc[test_idx])
+        probabilities = model.predict_proba(features.iloc[test_idx])[:, 1]
+        precisions.append(precision_score(truth.iloc[test_idx], predicted, zero_division=0))
+        recalls.append(recall_score(truth.iloc[test_idx], predicted, zero_division=0))
+        f1s.append(f1_score(truth.iloc[test_idx], predicted, zero_division=0))
+        accuracies.append(accuracy_score(truth.iloc[test_idx], predicted))
+        aucs.append(roc_auc_score(truth.iloc[test_idx], probabilities))
     return {
-        "precision": round(precision_score(truth, predictions, zero_division=0), 4),
-        "recall": round(recall_score(truth, predictions, zero_division=0), 4),
-        "f1_score": round(f1_score(truth, predictions, zero_division=0), 4),
-        "accuracy": round(accuracy_score(truth, predictions), 4),
-        "roc_auc": round(roc_auc_score(truth, probabilities), 4),
+        "precision": round(float(np.mean(precisions)), 4),
+        "precision_std": round(float(np.std(precisions)), 4),
+        "recall": round(float(np.mean(recalls)), 4),
+        "recall_std": round(float(np.std(recalls)), 4),
+        "f1_score": round(float(np.mean(f1s)), 4),
+        "f1_score_std": round(float(np.std(f1s)), 4),
+        "accuracy": round(float(np.mean(accuracies)), 4),
+        "accuracy_std": round(float(np.std(accuracies)), 4),
+        "roc_auc": round(float(np.mean(aucs)), 4),
+        "roc_auc_std": round(float(np.std(aucs)), 4),
     }
 
 

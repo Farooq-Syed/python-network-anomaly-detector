@@ -128,7 +128,9 @@ def run_budget(features, truth, fraction, folds, random_state) -> Dict[str, floa
         "labeled_fraction": fraction,
         "approx_labeled_rows": n_labeled,
         "supervised_f1": round(float(np.mean(supervised_scores)), 4),
+        "supervised_f1_std": round(float(np.std(supervised_scores)), 4),
         "self_training_f1": round(float(np.mean(selftrain_scores)), 4),
+        "self_training_f1_std": round(float(np.std(selftrain_scores)), 4),
     }
 
 

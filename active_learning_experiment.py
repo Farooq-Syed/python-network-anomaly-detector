@@ -63,6 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed-size", type=int, default=DEFAULT_SEED, help="Labels to seed the learner.")
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH, help="Labels added per round.")
     parser.add_argument("--budget", type=int, default=DEFAULT_BUDGET, help="Total labels allowed.")
+    parser.add_argument("--unsupervised-reference", type=float, default=UNSUPERVISED_ENSEMBLE_F1, help="Reference unsupervised F1 (drawn on the plot).")
+    parser.add_argument("--supervised-reference", type=float, default=FULLY_SUPERVISED_F1, help="Reference fully-supervised F1 (drawn on the plot).")
     parser.add_argument("--random-state", type=int, default=42)
     return parser
 
@@ -140,7 +142,7 @@ def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_si
     return result
 
 
-def run(features, truth, folds, seed_size, batch_size, budget, random_state) -> Dict[str, Dict[int, float]]:
+def run(features, truth, folds, seed_size, batch_size, budget, random_state) -> Dict[str, Dict[int, Dict[str, float]]]:
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
     per_strategy: Dict[str, Dict[int, List[float]]] = {strategy: {} for strategy in STRATEGIES}
     for train_idx, test_idx in splitter.split(features, truth):
@@ -149,38 +151,41 @@ def run(features, truth, folds, seed_size, batch_size, budget, random_state) -> 
             for label_count, f1 in fold_result.items():
                 per_strategy[strategy].setdefault(label_count, []).append(f1)
 
-    averaged: Dict[str, Dict[int, float]] = {}
+    averaged: Dict[str, Dict[int, Dict[str, float]]] = {}
     for strategy, counts in per_strategy.items():
-        averaged[strategy] = {
-            count: round(float(np.mean(scores)), 4) for count, scores in sorted(counts.items())
-        }
+        averaged[strategy] = {}
+        for count, scores in sorted(counts.items()):
+            averaged[strategy][count] = {
+                "f1_mean": round(float(np.mean(scores)), 4),
+                "f1_std": round(float(np.std(scores)), 4),
+            }
     return averaged
 
 
-def save_metrics(results: Dict[str, Dict[int, float]], path: Path) -> None:
+def save_metrics(results: Dict[str, Dict[int, Dict[str, float]]], path: Path, unsupervised_ref: float, supervised_ref: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "unsupervised_ensemble_f1": UNSUPERVISED_ENSEMBLE_F1,
-        "fully_supervised_f1": FULLY_SUPERVISED_F1,
+        "unsupervised_ensemble_f1": unsupervised_ref,
+        "fully_supervised_f1": supervised_ref,
         "strategies": {
-            strategy: [{"labels": count, "f1": f1} for count, f1 in scores.items()]
-            for strategy, scores in results.items()
+            strategy: [{"labels": count, **scores} for count, scores in counts.items()]
+            for strategy, counts in results.items()
         },
     }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def plot_curves(results: Dict[str, Dict[int, float]], path: Path) -> None:
+def plot_curves(results: Dict[str, Dict[int, Dict[str, float]]], path: Path, unsupervised_ref: float, supervised_ref: float) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     plt.style.use("ggplot")
     fig, ax = plt.subplots(figsize=(9, 5.5))
     colors = {"random": "#e76f51", "uncertainty": "#2a9d8f"}
     for strategy, scores in results.items():
         counts = list(scores.keys())
-        f1s = list(scores.values())
+        f1s = [scores[c]["f1_mean"] for c in counts]
         ax.plot(counts, f1s, "o-", color=colors[strategy], label=f"{strategy} sampling")
-    ax.axhline(FULLY_SUPERVISED_F1, color="#264653", ls=":", lw=1.5, label=f"Fully supervised ({FULLY_SUPERVISED_F1:.2f})")
-    ax.axhline(UNSUPERVISED_ENSEMBLE_F1, color="#c1121f", ls=":", lw=1.5, label=f"Unsupervised ensemble ({UNSUPERVISED_ENSEMBLE_F1:.2f})")
+    ax.axhline(supervised_ref, color="#264653", ls=":", lw=1.5, label=f"Fully supervised ({supervised_ref:.2f})")
+    ax.axhline(unsupervised_ref, color="#c1121f", ls=":", lw=1.5, label=f"Unsupervised ensemble ({unsupervised_ref:.2f})")
     ax.set_xlabel("Number of labeled flows (budget)")
     ax.set_ylabel("F1 score (5-fold CV)")
     ax.set_ylim(0, 1.05)
@@ -191,11 +196,15 @@ def plot_curves(results: Dict[str, Dict[int, float]], path: Path) -> None:
     plt.close(fig)
 
 
-def print_summary(results: Dict[str, Dict[int, float]]) -> None:
+def print_summary(results: Dict[str, Dict[int, Dict[str, float]]]) -> None:
     counts = sorted(next(iter(results.values())).keys())
     print(f"{'labels':>8}{'random':>10}{'uncertainty':>12}")
     for count in counts:
-        print(f"{count:>8}{results['random'][count]:>10.3f}{results['uncertainty'][count]:>12.3f}")
+        random_f1 = results["random"][count]["f1_mean"]
+        random_std = results["random"][count]["f1_std"]
+        uncertainty_f1 = results["uncertainty"][count]["f1_mean"]
+        uncertainty_std = results["uncertainty"][count]["f1_std"]
+        print(f"{count:>8}{random_f1:>8.3f}±{random_std:.3f}{uncertainty_f1:>8.3f}±{uncertainty_std:.3f}")
     print(f"\nreference  unsupervised ensemble F1 = {UNSUPERVISED_ENSEMBLE_F1:.2f}"
           f"   fully supervised F1 = {FULLY_SUPERVISED_F1:.2f}")
 
@@ -205,8 +214,8 @@ def main() -> None:
     features, truth = load_labeled(Path(args.input), args.label_column)
     print(f"Loaded {len(truth)} rows, {int(truth.sum())} attacks.\n")
     results = run(features, truth, args.folds, args.seed_size, args.batch_size, args.budget, args.random_state)
-    save_metrics(results, Path(args.metrics_output))
-    plot_curves(results, Path(args.plot))
+    save_metrics(results, Path(args.metrics_output), args.unsupervised_reference, args.supervised_reference)
+    plot_curves(results, Path(args.plot), args.unsupervised_reference, args.supervised_reference)
     print_summary(results)
     print(f"\nMetrics -> {args.metrics_output}")
     print(f"Plot    -> {args.plot}")

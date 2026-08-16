@@ -119,3 +119,26 @@ Three additions, and the active-learning one surprised me.
 
 Test count is up to 26. The unsupervised 0.27 and supervised 0.99 numbers on the UNSW
 subset are unchanged.
+
+## Real CIC-IDS2017 pass
+
+Took the second-benchmark claim from "one command away" to actually done.
+
+- **Data.** Downloaded four days of the real CIC-IDS2017 flows from the
+  bvsam/cic-ids-2017 mirror (Monday benign, Wednesday attacks, Friday PortScan +
+  DDoS) and prepared a balanced 12,000-row, 78-feature subset. Two real-world
+  gotchas worth remembering: the flow files carry inf wherever a flow had zero
+  duration (a division-by-zero in the original dataset), and a pre-binarized label
+  column breaks a loader that only understands "BENIGN" strings. Both are handled
+  and pinned by tests now.
+- **The result I did not expect.** On CIC-IDS2017, random sampling beats uncertainty
+  sampling across almost the whole label budget (F1 0.93 vs 0.90 at 100 labels).
+  That's the opposite of the UNSW-NB15 result, where uncertainty wins by about
+  +0.005 F1 on a plateau. So the honest summary is: query strategy matters little,
+  and its sign flips between benchmarks. My guess is miscalibrated probabilities on
+  high-dimensional flow features, plus CIC's known labeling noise punishing a
+  strategy that goes hunting for borderline rows. That is a hypothesis to test, not
+  a number to hide.
+- **Confidence intervals.** Every cross-validated number in this repo now carries a
+  per-fold mean +/- std. It changed how I read my own results: the "wins" at the
+  early budgets are all within noise, and only the late-budget UNSW edge survives.

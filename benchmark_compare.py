@@ -97,9 +97,13 @@ def supervised_cv(features: pd.DataFrame, truth: np.ndarray, folds: int, random_
         aucs.append(roc_auc_score(truth[test_idx], probabilities))
     return {
         "precision": round(float(np.mean(precisions)), 4),
+        "precision_std": round(float(np.std(precisions)), 4),
         "recall": round(float(np.mean(recalls)), 4),
+        "recall_std": round(float(np.std(recalls)), 4),
         "f1": round(float(np.mean(f1s)), 4),
+        "f1_std": round(float(np.std(f1s)), 4),
         "roc_auc": round(float(np.mean(aucs)), 4),
+        "roc_auc_std": round(float(np.std(aucs)), 4),
     }
 
 

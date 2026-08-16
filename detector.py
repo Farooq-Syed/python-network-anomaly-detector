@@ -167,15 +167,25 @@ def prepare_benchmark(path: Path, label_column: str | None = None):
     schema = detect_benchmark_schema(dataframe)
 
     if schema == "cic-ids2017":
-        numeric_columns = dataframe.select_dtypes(include=["number"]).columns.tolist()
-        if not numeric_columns:
-            raise ValueError("No numeric feature columns were found in the CIC-IDS2017 data.")
         label_name = "Label" if "Label" in dataframe.columns else "Label2"
         if label_name not in dataframe.columns:
             raise ValueError("No label column ('Label'/'Label2') was found in the CIC-IDS2017 data.")
-        truth = dataframe[label_name].apply(
-            lambda value: 0 if str(value).strip().lower() == "benign" else 1
-        ).to_numpy(dtype=int)
+        numeric_columns = [
+            column
+            for column in dataframe.select_dtypes(include=["number"]).columns.tolist()
+            if column != label_name
+        ]
+        if not numeric_columns:
+            raise ValueError("No numeric feature columns were found in the CIC-IDS2017 data.")
+        label_series = dataframe[label_name]
+        # Accept both the original string labels (BENIGN / attack category) and a
+        # pre-binarized 0/1 column, which a prepared subset produces.
+        if pd.api.types.is_numeric_dtype(label_series) and set(label_series.dropna().unique()).issubset({0, 1}):
+            truth = label_series.astype(int).to_numpy()
+        else:
+            truth = label_series.apply(
+                lambda value: 0 if str(value).strip().lower() == "benign" else 1
+            ).to_numpy(dtype=int)
         features = dataframe[numeric_columns]
         return features, truth, schema
 

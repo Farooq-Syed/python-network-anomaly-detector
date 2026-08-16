@@ -19,15 +19,16 @@ under identical cross-validation — a gap of roughly +0.73 that locates the
 difficulty in the learning setting rather than the data. Two experiments follow that
 gap. The first shows almost all of it closes with on the order of a few dozen labels,
 and that self-training over the unlabeled remainder helps only in the narrow regime
-where labels are scarcest. The second, newer experiment asks whether it matters *which*
-rows you label: under a fixed budget, does uncertainty sampling beat random sampling?
-On this benchmark, mostly not — and the honest reading is that UNSW-NB15's classes
-separate too easily for query strategy to matter. A second, harder benchmark is the
-natural way to find out if that finding generalizes. Along the way, the pipeline grew
-a schema-aware loader that can consume CIC-IDS2017-style data and a time-window
-aggregation step, and one silent bug was found and fixed: a label-leakage path that
-fed the ground-truth column back in as a feature whenever the user did not explicitly
-name it.
+where labels are scarcest. The second asks whether it matters *which* rows you label:
+under a fixed budget, does uncertainty sampling beat random sampling? The answer is
+honestly messier than the textbook expects. On UNSW-NB15, uncertainty sampling earns
+a small, consistent edge (+0.005 F1) once the model has a few dozen labels — but that
+edge sits on a plateau where both strategies are already near the ceiling. On a
+real 12,000-row CIC-IDS2017 subset the sign flips: random sampling beats uncertainty
+sampling across most of the budget. Query strategy matters far less than the
+benchmark's difficulty, and in the wrong direction on the harder data. All metrics are
+now reported as mean ± std across folds, so the spread is visible rather than
+hidden.
 
 ## 1. Introduction
 
@@ -49,13 +50,14 @@ the honest, unflattering result.
 
 Three datasets ship with the project. A 12-row basic sample exercises the unlabeled
 path. A 24-row labeled research sample validates the evaluation path on a cleanly
-separable case. The substantive benchmark is a 6,000-row subset of UNSW-NB15
-(3,000 benign, 3,000 attack) with 23 numeric flow features, used to test the pipeline
-on realistic, mixed traffic where the classes overlap. A newer, schema-aware loader
-(`prepare_benchmark`) recognizes the CIC-IDS2017 column vocabulary and maps its
-string labels (anything that is not `BENIGN` counts as attack), so the same pipeline
-can be pointed at a second benchmark without a format switch in the calling code. A
-small synthetic CIC-style sample ships with the project so that path is exercised.
+separable case. The primary benchmark is a 6,000-row subset of UNSW-NB15
+(3,000 benign, 3,000 attack) with 23 numeric flow features. A second benchmark is a
+real 12,000-row subset of CIC-IDS2017 (6,000 benign, 6,000 attack) with 78 numeric
+flow features, prepared from the public `bvsam/cic-ids-2017` mirror of the official
+dataset (`prepare_cic_ids2017.py` reproduces it). The two benchmarks deliberately
+stress different things: UNSW-NB15's attack flows are near-uniform outliers, while
+CIC-IDS2017's attacks overlap more with normal traffic and its rate-style features
+carry `inf` values wherever a flow had zero duration.
 
 ## 3. Methods
 
@@ -135,6 +137,12 @@ structure; an unsupervised "find the unusual points" method cannot. The near-per
 supervised result also confirms the features carry ample signal, so the shortfall is a
 property of the learning setting, not of impoverished data.
 
+The gap generalizes. On the real CIC-IDS2017 subset the same two families separate
+the same way — unsupervised ensemble F1 = 0.27, supervised (logistic) F1 = 0.97, a
+gap of +0.69. The ceiling is a little lower on CIC (0.97 vs. 0.996), the first sign
+that this benchmark is the harder of the two and therefore the right place to look
+for the label-efficiency story to break.
+
 ## 7. How many labels do you actually need?
 
 The +0.73 gap is only useful if the labels required to close it are affordable, since
@@ -169,20 +177,32 @@ is least sure about (predictions closest to 0.5); random sampling labels blindly
 active-learning experiment compares the two under the same folds and the same budget,
 starting from a small seed.
 
-The result is a negative one, and I mean that as a finding. On this benchmark, random
-sampling keeps pace with uncertainty sampling — at several budgets it beats it. The
-reason is the same reason the label-budget knee was so early: UNSW-NB15's classes
-separate so cleanly that a logistic regression anchored by a handful of labels has
-little uncertainty worth exploiting. Query strategy is only as valuable as the
-model's uncertainty is informative, and here it mostly isn't.
+The result is messier than the textbook predicts, and I ran it on two benchmarks to
+check myself.
 
-That is exactly the result that needs a harder test. CIC-IDS2017, where attack flows
-overlap more with benign traffic, would either confirm "random is fine" or flip the
-finding — and either answer is a real contribution. The schema-aware loader makes that
-test a one-command operation. As a check that the pipeline runs on a different
-schema, the synthetic CIC-style sample shows the same shape (unsupervised F1 ≈ 0.24
-vs. supervised ≈ 0.51), but those numbers are illustrative only; the synthetic
-distributions are invented.
+**On UNSW-NB15** the strategies are close, but uncertainty sampling has a small,
+consistent edge once the model has a few dozen labels: around F1 0.996 vs. 0.990 for
+random at a 240-label budget. The spread across folds (±0.001 for uncertainty, ±0.004
+for random) is also smaller. But the honest reading is that this edge lives on a
+plateau — by 50 labels both strategies are already at 0.99, so the gap between them
+is worth about five-thousandths of F1 against a ceiling of 0.996. That is a real
+signal and a useless margin at the same time.
+
+**On the real CIC-IDS2017 subset** the sign flips. Random sampling beats uncertainty
+sampling across nearly the whole budget — F1 0.928 vs. 0.896 at 100 labels, and the
+two only converge at the very end of the budget. This is the opposite of what the
+active-learning literature commonly assumes, and it is worth taking seriously rather
+than explaining away.
+
+Putting the two together, the defensible claim is narrow and negative: **query
+strategy has a small effect, and its sign is not consistent across benchmarks.** On
+an easy benchmark it buys a sliver on a plateau; on a harder one it loses. Uncertainty
+sampling is not a free improvement on these datasets. My working hypothesis is that
+the uncertainty estimates of a high-dimensional logistic model are miscalibrated on
+this kind of flow data, and that CIC-IDS2017's known labeling noise punishes a
+strategy that preferentially queries borderline, noisier rows. Testing that
+hypothesis properly — with calibrated probabilities and a threshold-aware query —
+is the obvious next experiment.
 
 ## 9. A documented limitation: z-score self-masking
 
@@ -219,28 +239,34 @@ for its claims than an unverified comparison to numbers from another setup.
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; they are
   best read against the supervised and label-budget results rather than in isolation.
-- The active-learning result is single-benchmark. The claim that "query strategy does
-  not matter" is precisely the claim that needs a second, harder benchmark to hold.
+- The active-learning comparison covers two benchmarks, not several. The claim is that
+  query strategy's effect is small and inconsistent in sign; holding that claim would
+  need a wider sweep, ideally with calibrated probabilities and a threshold-aware
+  query strategy.
+- The CIC-IDS2017 subset is a balanced 12,000-row sample of four days' traffic, not
+  the full multi-gigabyte dataset; the full dataset includes more attack families and
+  long-tail behavior that a balanced sample underrepresents.
 - The leakage guard matches on column name and would miss an unconventionally named
   label.
-- The CIC comparison is currently exercised on a synthetic sample; the full benchmark
-  is a download away but has not been run here.
 - The ensemble is an unweighted vote, not a calibrated combiner.
 
 ## 12. Future work
 
-The active-learning result points directly at the experiment that matters next:
-run the same random-vs-uncertainty comparison on a benchmark where the classes are
-not cleanly separable. A correlation-aware leakage check and a calibrated ensemble
-combiner are further refinements, and the time-window aggregation is an opening
-toward temporal features rather than a finished method.
+The active-learning result now points at a more specific experiment than it did
+before: the sign of the query-strategy effect flipped between benchmarks, so the
+question is *why*. Testing whether calibration — or the known labeling noise in
+CIC-IDS2017 — explains the flip is the natural next step, and a correlation-aware
+leakage check and a calibrated ensemble combiner are further refinements. The
+time-window aggregation remains an opening toward temporal features rather than a
+finished method.
 
 ## 13. Conclusion
 
 The detectors here are standard; the project's worth is in evaluating them honestly on
-a real benchmark and in the discipline of the cleanup. Fixing a label-leakage defect
+real benchmarks and in the discipline of the cleanup. Fixing a label-leakage defect
 that failed in the flattering direction, documenting the z-score self-masking behavior
-that a test surfaced, and — in the newer pass — reporting an active-learning negative
-result rather than engineering it away, all push the tool toward reporting what is
-true rather than what looks good. For an anomaly detector whose whole value is
-trustworthiness, that is the point.
+that a test surfaced, and — in the newer pass — reporting an active-learning result
+whose sign flipped between benchmarks rather than engineering it away, all push the
+tool toward reporting what is true rather than what looks good. Reporting mean ± std
+across folds rather than single point estimates is part of the same habit. For an
+anomaly detector whose whole value is trustworthiness, that is the point.

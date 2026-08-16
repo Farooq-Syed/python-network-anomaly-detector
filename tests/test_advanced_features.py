@@ -19,6 +19,7 @@ import detector  # noqa: E402
 from active_learning_experiment import run_fold, select_queries  # noqa: E402
 
 CIC_SAMPLE = PROJECT_DIR / "data" / "sample_cic_ids2017_style.csv"
+CIC_SUBSET = PROJECT_DIR / "data" / "cic_ids2017_subset.csv"
 
 
 class BenchmarkSchemaTests(unittest.TestCase):
@@ -39,6 +40,17 @@ class BenchmarkSchemaTests(unittest.TestCase):
         # String columns (Flow ID, Label) must not leak into the features.
         self.assertNotIn("Flow ID", features.columns)
         self.assertNotIn("Label", features.columns)
+
+    def test_prepare_benchmark_reads_binary_cic_subset(self):
+        if not CIC_SUBSET.exists():
+            self.skipTest("Real CIC-IDS2017 subset not present.")
+        features, truth, schema = detector.prepare_benchmark(CIC_SUBSET, "Label")
+        self.assertEqual(schema, "cic-ids2017")
+        self.assertEqual(len(features), len(truth))
+        self.assertNotIn("Label", features.columns)
+        # Balanced subset, so both classes must be present.
+        self.assertGreater(int(truth.sum()), 0)
+        self.assertLess(int(truth.sum()), len(truth))
 
 
 class TimeWindowTests(unittest.TestCase):

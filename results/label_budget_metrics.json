@@ -1,0 +1,78 @@
+{
+  "unsupervised_ensemble_f1": 0.27,
+  "fully_supervised_f1": 0.996,
+  "budgets": [
+    {
+      "labeled_fraction": 0.002,
+      "approx_labeled_rows": 10,
+      "supervised_f1": 0.8398,
+      "supervised_f1_std": 0.1672,
+      "self_training_f1": 0.8729,
+      "self_training_f1_std": 0.1812
+    },
+    {
+      "labeled_fraction": 0.005,
+      "approx_labeled_rows": 24,
+      "supervised_f1": 0.9231,
+      "supervised_f1_std": 0.0478,
+      "self_training_f1": 0.9491,
+      "self_training_f1_std": 0.0394
+    },
+    {
+      "labeled_fraction": 0.01,
+      "approx_labeled_rows": 48,
+      "supervised_f1": 0.98,
+      "supervised_f1_std": 0.0044,
+      "self_training_f1": 0.9855,
+      "self_training_f1_std": 0.0022
+    },
+    {
+      "labeled_fraction": 0.02,
+      "approx_labeled_rows": 96,
+      "supervised_f1": 0.986,
+      "supervised_f1_std": 0.0027,
+      "self_training_f1": 0.9887,
+      "self_training_f1_std": 0.0019
+    },
+    {
+      "labeled_fraction": 0.05,
+      "approx_labeled_rows": 240,
+      "supervised_f1": 0.9909,
+      "supervised_f1_std": 0.0031,
+      "self_training_f1": 0.9922,
+      "self_training_f1_std": 0.0035
+    },
+    {
+      "labeled_fraction": 0.1,
+      "approx_labeled_rows": 480,
+      "supervised_f1": 0.9932,
+      "supervised_f1_std": 0.0021,
+      "self_training_f1": 0.9942,
+      "self_training_f1_std": 0.0017
+    },
+    {
+      "labeled_fraction": 0.25,
+      "approx_labeled_rows": 1200,
+      "supervised_f1": 0.9945,
+      "supervised_f1_std": 0.0013,
+      "self_training_f1": 0.9945,
+      "self_training_f1_std": 0.0013
+    },
+    {
+      "labeled_fraction": 0.5,
+      "approx_labeled_rows": 2400,
+      "supervised_f1": 0.9952,
+      "supervised_f1_std": 0.0016,
+      "self_training_f1": 0.9952,
+      "self_training_f1_std": 0.0016
+    },
+    {
+      "labeled_fraction": 1.0,
+      "approx_labeled_rows": 4800,
+      "supervised_f1": 0.9955,
+      "supervised_f1_std": 0.0013,
+      "self_training_f1": 0.9955,
+      "self_training_f1_std": 0.0013
+    }
+  ]
+}
