@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Farooq-Syed/python-network-anomaly-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Farooq-Syed/python-network-anomaly-detector/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-non--commercial-purple)
 
 This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
