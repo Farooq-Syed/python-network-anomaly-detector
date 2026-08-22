@@ -6,14 +6,21 @@
 
 This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
+Developed with AI coding assistance; the author chose the benchmarks, designed the
+comparisons, reviewed and revised the code, interpreted the results, and verified the
+final claims.
+
 ## Results at a glance
 
 ![Results panel](assets/results_panel.png)
 
 Four detectors vote on each flow. Evaluated on a 6,000-row UNSW-NB15 subset, no method
-exceeds F1 = 0.30 — the honest, unglamorous reality of unsupervised detection on mixed
-traffic, and more credible than a toy that scores perfectly. See [PAPER.md](PAPER.md)
-for the method and [JOURNAL.md](JOURNAL.md) for the development notes.
+exceeds F1 = 0.30, and the same broad result holds on newer benchmark checks
+(`CIC-IDS2017` and `CSE-CIC-IDS2018`). That is the honest, unglamorous reality of
+unsupervised detection on mixed traffic, and more credible than a toy that scores
+perfectly. See [PAPER.md](PAPER.md) for the method, [JOURNAL.md](JOURNAL.md) for the
+development notes, and [REFERENCES.md](REFERENCES.md) for the benchmark and method
+citations.
 
 The pipeline compares four detectors:
 
@@ -35,6 +42,8 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 - schema-aware loader for CIC-IDS2017-style data
 - optional per-source time-window aggregation (`--window-minutes`)
 - supervised baseline, label-budget, and active-learning experiments
+- benchmark-preparation utilities for `UNSW-NB15`, `CIC-IDS2017`, and compatible
+  `CICFlowMeter` exports such as `CSE-CIC-IDS2018`
 
 ## Project Structure
 
@@ -136,6 +145,16 @@ query-strategy result flips), passing the measured supervised reference:
 python active_learning_experiment.py --input data/cic_ids2017_subset.csv --label-column Label --supervised-reference 0.966
 ```
 
+Prepare and compare a newer `CSE-CIC-IDS2018` subset from compatible CICFlowMeter CSVs:
+
+```powershell
+python prepare_cic_ids2017.py --files "C:\path\to\Wednesday-14-02-2018_TrafficForML_CICFlowMeter.csv" `
+                              "C:\path\to\Thursday-01-03-2018_TrafficForML_CICFlowMeter.csv" `
+                              "C:\path\to\Friday-02-03-2018_TrafficForML_CICFlowMeter.csv" `
+                              --output data/cse_cic_ids2018_subset.csv --rows-per-class 6000
+python benchmark_compare.py --input data/cse_cic_ids2018_subset.csv --label-column Label
+```
+
 Prepare a CIC-IDS2017 subset from the Hugging Face mirror or from local files:
 
 ```powershell
@@ -224,6 +243,19 @@ Metrics from `results/unsw_nb15_subset_metrics.json`:
 
 These results are much less “perfect” than the toy sample, which is what I would expect from a real intrusion detection benchmark. They show the difficulty of anomaly detection on mixed traffic and make the project more credible than a toy-only example.
 
+## Cross-benchmark check
+
+The current repository also includes a broader benchmark story beyond UNSW-NB15:
+
+| Benchmark | Unsupervised ensemble F1 | Supervised F1 |
+| --- | --- | --- |
+| `UNSW-NB15` subset | 0.270 | 0.996 |
+| `CIC-IDS2017` subset | 0.272 | 0.966 |
+| `CSE-CIC-IDS2018` subset | 0.178 | 0.924 |
+
+The main conclusion survives the newer benchmark: labels matter a lot, and the
+unsupervised ensemble gets weaker rather than stronger on the harder 2018 data.
+
 ## Visuals
 
 Sample labeled dataset visuals:
@@ -254,6 +286,25 @@ Official dataset pages:
 
 - [UNSW-NB15](https://research.unsw.edu.au/projects/unsw-nb15-dataset)
 - [CIC-IDS2017](https://www.unb.ca/cic/datasets/ids-2017.html)
+- [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html)
+
+## Authorship and AI use
+
+- The project ideas, benchmark choices, evaluation protocol, error analysis, and final
+  interpretations are the author's.
+- AI assistance was used for coding support and drafting help.
+- The author reviewed, edited, tested, and verified the final code and claims.
+
+## Suggested citation
+
+If you want a compact scholarly grounding for this repo, start with
+[REFERENCES.md](REFERENCES.md). The most directly relevant citations are:
+
+- Moustafa and Slay (2015) for `UNSW-NB15`
+- Sharafaldin, Lashkari, and Ghorbani (2018) for `CIC-IDS2017`
+- the official `CSE-CIC-IDS2018` dataset page for the newer benchmark
+- Liu, Ting, and Zhou (2008), Breunig et al. (2000), and Schölkopf et al. (2001) for
+  the core anomaly-detection methods used here
 
 ## Limitations
 
@@ -263,6 +314,9 @@ Official dataset pages:
 - the current ensemble uses a simple vote rather than tuned model calibration
 - the CIC subset is a balanced sample of four days' traffic, which underrepresents
   long-tail attack families
+- the `CSE-CIC-IDS2018` subset currently uses three attack-bearing CICFlowMeter days,
+  which is enough for a meaningful comparison but not a full replay of the entire
+  10-day benchmark
 
 ## Next Steps
 

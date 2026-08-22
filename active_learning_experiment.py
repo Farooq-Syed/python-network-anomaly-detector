@@ -196,7 +196,11 @@ def plot_curves(results: Dict[str, Dict[int, Dict[str, float]]], path: Path, uns
     plt.close(fig)
 
 
-def print_summary(results: Dict[str, Dict[int, Dict[str, float]]]) -> None:
+def print_summary(
+    results: Dict[str, Dict[int, Dict[str, float]]],
+    unsupervised_ref: float,
+    supervised_ref: float,
+) -> None:
     counts = sorted(next(iter(results.values())).keys())
     print(f"{'labels':>8}{'random':>10}{'uncertainty':>12}")
     for count in counts:
@@ -205,8 +209,8 @@ def print_summary(results: Dict[str, Dict[int, Dict[str, float]]]) -> None:
         uncertainty_f1 = results["uncertainty"][count]["f1_mean"]
         uncertainty_std = results["uncertainty"][count]["f1_std"]
         print(f"{count:>8}{random_f1:>8.3f}±{random_std:.3f}{uncertainty_f1:>8.3f}±{uncertainty_std:.3f}")
-    print(f"\nreference  unsupervised ensemble F1 = {UNSUPERVISED_ENSEMBLE_F1:.2f}"
-          f"   fully supervised F1 = {FULLY_SUPERVISED_F1:.2f}")
+    print(f"\nreference  unsupervised ensemble F1 = {unsupervised_ref:.2f}"
+          f"   fully supervised F1 = {supervised_ref:.2f}")
 
 
 def main() -> None:
@@ -216,7 +220,7 @@ def main() -> None:
     results = run(features, truth, args.folds, args.seed_size, args.batch_size, args.budget, args.random_state)
     save_metrics(results, Path(args.metrics_output), args.unsupervised_reference, args.supervised_reference)
     plot_curves(results, Path(args.plot), args.unsupervised_reference, args.supervised_reference)
-    print_summary(results)
+    print_summary(results, args.unsupervised_reference, args.supervised_reference)
     print(f"\nMetrics -> {args.metrics_output}")
     print(f"Plot    -> {args.plot}")
 

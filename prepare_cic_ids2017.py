@@ -1,4 +1,4 @@
-"""Prepare a manageable CIC-IDS2017 subset for the anomaly detector.
+"""Prepare a manageable CIC-style subset for the anomaly detector.
 
 CIC-IDS2017 is a large public intrusion detection benchmark (the flow CSVs total
 several gigabytes). This script builds a small, balanced subset from either:
@@ -10,6 +10,10 @@ several gigabytes). This script builds a small, balanced subset from either:
 Whichever source is used, the output is a CSV of the numeric flow features plus a
 binary Label column (BENIGN = 0, anything else = 1), which the detector's
 schema-aware loader (`prepare_benchmark`) consumes directly.
+
+Although the filename keeps the original project name, the preparation logic also
+works on closely related CICFlowMeter exports such as CSE-CIC-IDS2018, which share
+the same broad schema (numeric flow features plus a string label column).
 
 Usage:
     python prepare_cic_ids2017.py --files "C:\\data\\Wednesday-workingHours.pcap_ISCX.csv"
@@ -55,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _load_one(path: str) -> pd.DataFrame:
     if path.endswith(".parquet"):
         return pd.read_parquet(path)
-    return pd.read_csv(path)
+    return pd.read_csv(path, low_memory=False)
 
 
 def load_hf(dataset_id: str, prefix: str, file_names: list[str]) -> pd.DataFrame:
@@ -83,10 +87,27 @@ def find_label_column(dataframe: pd.DataFrame) -> str:
 
 
 def select_numeric_features(dataframe: pd.DataFrame, label_column: str) -> pd.DataFrame:
-    numeric_columns = dataframe.select_dtypes(include=["number"]).columns.tolist()
+    """Keep numeric CICFlowMeter features and a clean binary label.
+
+    Some real CIC CSV exports contain repeated header rows in the middle of the file,
+    which show up as rows whose label is literally "Label". Those rows are metadata,
+    not traffic, and must be removed before binarizing the label column.
+    """
+    valid_rows = dataframe[label_column].astype(str).str.strip().str.lower() != label_column.lower()
+    filtered = dataframe.loc[valid_rows].copy()
+
+    # CICFlowMeter CSVs can pick up repeated header rows mid-file, which may force
+    # pandas to infer some otherwise-numeric columns as object dtype. Coerce every
+    # non-label column back toward numeric and keep the ones that succeed.
+    feature_candidates = [column for column in filtered.columns if column != label_column]
+    coerced_features = filtered[feature_candidates].apply(pd.to_numeric, errors="coerce")
+    coerced_features = coerced_features.dropna(axis=1, how="all")
+    numeric_columns = coerced_features.columns.tolist()
     if not numeric_columns:
-        raise ValueError("No numeric feature columns were found in the CIC-IDS2017 data.")
-    prepared = dataframe[numeric_columns + [label_column]].copy()
+        raise ValueError("No numeric feature columns were found in the CIC-style data.")
+
+    prepared = coerced_features[numeric_columns].copy()
+    prepared[label_column] = filtered[label_column].values
     prepared[label_column] = prepared[label_column].apply(
         lambda value: 0 if str(value).strip().lower() == "benign" else 1
     )

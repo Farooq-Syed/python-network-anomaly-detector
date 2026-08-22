@@ -17,6 +17,7 @@ sys.path.insert(0, str(PROJECT_DIR))
 
 import detector  # noqa: E402
 from active_learning_experiment import run_fold, select_queries  # noqa: E402
+from prepare_cic_ids2017 import select_numeric_features  # noqa: E402
 
 CIC_SAMPLE = PROJECT_DIR / "data" / "sample_cic_ids2017_style.csv"
 CIC_SUBSET = PROJECT_DIR / "data" / "cic_ids2017_subset.csv"
@@ -51,6 +52,18 @@ class BenchmarkSchemaTests(unittest.TestCase):
         # Balanced subset, so both classes must be present.
         self.assertGreater(int(truth.sum()), 0)
         self.assertLess(int(truth.sum()), len(truth))
+
+    def test_prepare_subset_drops_repeated_header_rows(self):
+        frame = pd.DataFrame(
+            {
+                "Flow Duration": [10.0, 20.0, 30.0],
+                "Tot Fwd Pkts": [1, 2, 3],
+                "Label": ["Benign", "Label", "Bot"],
+            }
+        )
+        prepared = select_numeric_features(frame, "Label")
+        self.assertEqual(len(prepared), 2)
+        self.assertEqual(prepared["Label"].tolist(), [0, 1])
 
 
 class TimeWindowTests(unittest.TestCase):

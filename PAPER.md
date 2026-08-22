@@ -3,8 +3,9 @@
 **Farooq Syed** · M.S. in Computer and Information Security Systems, Eastern Illinois University · 2023
 
 *Independent research portfolio, prepared as part of a PhD application in cybersecurity.
-Developed with AI coding assistance; all methods, experiments, and findings were
-directed, reviewed, and verified by the author.*
+Developed with AI coding assistance; the author chose the benchmarks, defined the
+research questions, designed the evaluation protocol, reviewed and revised the code,
+interpreted the results, and verified the final claims.*
 
 ## Abstract
 
@@ -25,7 +26,9 @@ honestly messier than the textbook expects. On UNSW-NB15, uncertainty sampling e
 a small, consistent edge (+0.005 F1) once the model has a few dozen labels — but that
 edge sits on a plateau where both strategies are already near the ceiling. On a
 real 12,000-row CIC-IDS2017 subset the sign flips: random sampling beats uncertainty
-sampling across most of the budget. Query strategy matters far less than the
+sampling across most of the budget. A newer 12,000-row CSE-CIC-IDS2018 subset pushes
+the same point further: the unsupervised ensemble drops to F1 ≈ 0.18 while a
+supervised baseline still reaches F1 ≈ 0.92. Query strategy matters far less than the
 benchmark's difficulty, and in the wrong direction on the harder data. All metrics are
 now reported as mean ± std across folds, so the spread is visible rather than
 hidden.
@@ -54,10 +57,13 @@ separable case. The primary benchmark is a 6,000-row subset of UNSW-NB15
 (3,000 benign, 3,000 attack) with 23 numeric flow features. A second benchmark is a
 real 12,000-row subset of CIC-IDS2017 (6,000 benign, 6,000 attack) with 78 numeric
 flow features, prepared from the public `bvsam/cic-ids-2017` mirror of the official
-dataset (`prepare_cic_ids2017.py` reproduces it). The two benchmarks deliberately
-stress different things: UNSW-NB15's attack flows are near-uniform outliers, while
-CIC-IDS2017's attacks overlap more with normal traffic and its rate-style features
-carry `inf` values wherever a flow had zero duration.
+dataset (`prepare_cic_ids2017.py` reproduces it). A third, newer benchmark is a
+12,000-row subset of CSE-CIC-IDS2018 (6,000 benign, 6,000 attack) built from three
+attack-bearing CICFlowMeter days. The three benchmarks deliberately stress different
+things: UNSW-NB15's attack flows are near-uniform outliers, CIC-IDS2017's attacks
+overlap more with normal traffic and its rate-style features carry `inf` values
+wherever a flow had zero duration, and CSE-CIC-IDS2018 adds a harder enterprise-style
+flow distribution where the unsupervised family weakens further.
 
 ## 3. Methods
 
@@ -141,7 +147,11 @@ The gap generalizes. On the real CIC-IDS2017 subset the same two families separa
 the same way — unsupervised ensemble F1 = 0.27, supervised (logistic) F1 = 0.97, a
 gap of +0.69. The ceiling is a little lower on CIC (0.97 vs. 0.996), the first sign
 that this benchmark is the harder of the two and therefore the right place to look
-for the label-efficiency story to break.
+for the label-efficiency story to break. On the newer CSE-CIC-IDS2018 subset the
+unsupervised ensemble falls further to F1 = 0.18 while the supervised baseline still
+reaches F1 = 0.92, a gap of +0.75. The larger point holds: the features still carry
+strong label-dependent signal even where the "find unusual points" framing breaks
+down.
 
 ## 7. How many labels do you actually need?
 
@@ -177,7 +187,7 @@ is least sure about (predictions closest to 0.5); random sampling labels blindly
 active-learning experiment compares the two under the same folds and the same budget,
 starting from a small seed.
 
-The result is messier than the textbook predicts, and I ran it on two benchmarks to
+The result is messier than the textbook predicts, and I ran it on three benchmarks to
 check myself.
 
 **On UNSW-NB15** the strategies are close, but uncertainty sampling has a small,
@@ -194,14 +204,19 @@ two only converge at the very end of the budget. This is the opposite of what th
 active-learning literature commonly assumes, and it is worth taking seriously rather
 than explaining away.
 
-Putting the two together, the defensible claim is narrow and negative: **query
-strategy has a small effect, and its sign is not consistent across benchmarks.** On
-an easy benchmark it buys a sliver on a plateau; on a harder one it loses. Uncertainty
-sampling is not a free improvement on these datasets. My working hypothesis is that
-the uncertainty estimates of a high-dimensional logistic model are miscalibrated on
-this kind of flow data, and that CIC-IDS2017's known labeling noise punishes a
-strategy that preferentially queries borderline, noisier rows. Testing that
-hypothesis properly — with calibrated probabilities and a threshold-aware query —
+**On the newer CSE-CIC-IDS2018 subset** the effect is stronger in the same direction.
+Random sampling again beats uncertainty sampling, landing around F1 0.90 vs. 0.84 at
+the 240-label budget in the current balanced subset. The active learner appears to
+get stuck querying a narrower, less helpful slice of the space.
+
+Putting the three together, the defensible claim is narrow and negative: **query
+strategy has a small effect on easier data and can lose badly on harder benchmarks.**
+On UNSW-NB15 it buys a sliver on a plateau; on CIC-IDS2017 and CSE-CIC-IDS2018 it
+loses. Uncertainty sampling is not a free improvement on these datasets. My working
+hypothesis is that the uncertainty estimates of a high-dimensional logistic model are
+miscalibrated on this kind of flow data, and that noisier or more overlapping
+benchmarks punish a strategy that preferentially queries borderline rows. Testing
+that hypothesis properly — with calibrated probabilities and a threshold-aware query —
 is the obvious next experiment.
 
 ## 9. A documented limitation: z-score self-masking
@@ -232,20 +247,23 @@ Specific published figures are deliberately not quoted: they vary substantially 
 papers and subsets, and citing exact numbers without reproducing them on the identical
 subset would be misleading. The comparison this project offers is internal and
 reproducible — unsupervised, supervised, label-budgeted, and active-learned results
-measured under one cross-validation protocol on one subset — which is a stronger basis
-for its claims than an unverified comparison to numbers from another setup.
+measured under one cross-validation protocol across multiple benchmark subsets — which
+is a stronger basis for its claims than an unverified comparison to numbers from
+another setup.
 
 ## 11. Limitations
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; they are
   best read against the supervised and label-budget results rather than in isolation.
-- The active-learning comparison covers two benchmarks, not several. The claim is that
-  query strategy's effect is small and inconsistent in sign; holding that claim would
-  need a wider sweep, ideally with calibrated probabilities and a threshold-aware
-  query strategy.
+- The active-learning comparison now covers three benchmark subsets, but not several
+  families beyond the UNSW/CIC line. The claim is that query strategy's effect is
+  small and inconsistent in sign; holding that claim more broadly would need a wider
+  sweep, ideally with calibrated probabilities and a threshold-aware query strategy.
 - The CIC-IDS2017 subset is a balanced 12,000-row sample of four days' traffic, not
   the full multi-gigabyte dataset; the full dataset includes more attack families and
   long-tail behavior that a balanced sample underrepresents.
+- The CSE-CIC-IDS2018 subset is a balanced 12,000-row sample built from three
+  attack-bearing days, not a full replay of the entire 10-day benchmark.
 - The leakage guard matches on column name and would miss an unconventionally named
   label.
 - The ensemble is an unweighted vote, not a calibrated combiner.
@@ -270,3 +288,37 @@ whose sign flipped between benchmarks rather than engineering it away, all push 
 tool toward reporting what is true rather than what looks good. Reporting mean ± std
 across folds rather than single point estimates is part of the same habit. For an
 anomaly detector whose whole value is trustworthiness, that is the point.
+
+## 14. Authorship and tool-use note
+
+AI assistance was used during implementation and drafting, but the project's technical
+direction remained the author's: dataset selection, threat framing, benchmark choice,
+evaluation design, bug triage, result interpretation, and the final wording of claims
+were directed and verified by Farooq Syed.
+
+## 15. References
+
+1. Nour Moustafa and Jill Slay. *UNSW-NB15: a comprehensive data set for network
+   intrusion detection systems (UNSW-NB15 network data set).* MilCIS 2015.
+   Official dataset page: <https://research.unsw.edu.au/projects/unsw-nb15-dataset>
+
+2. Iman Sharafaldin, Arash Habibi Lashkari, and Ali A. Ghorbani.
+   *Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic
+   Characterization.* ICISSP 2018.
+   Official CIC-IDS2017 page: <https://www.unb.ca/cic/datasets/ids-2017.html>
+
+3. CSE-CIC-IDS2018 dataset. Official page:
+   <https://www.unb.ca/cic/datasets/ids-2018.html>
+
+4. Fei Tony Liu, Kai Ming Ting, and Zhi-Hua Zhou. *Isolation Forest.*
+   2008 IEEE International Conference on Data Mining.
+
+5. Markus M. Breunig, Hans-Peter Kriegel, Raymond T. Ng, and Jörg Sander.
+   *LOF: Identifying Density-Based Local Outliers.* ACM SIGMOD 2000.
+
+6. Bernhard Schölkopf, John C. Platt, John Shawe-Taylor, Alex J. Smola, and
+   Robert C. Williamson. *Estimating the Support of a High-Dimensional
+   Distribution.* Neural Computation, 2001.
+
+7. Patrik Goldschmidt and Daniela Chudá. *Network Intrusion Datasets: A Survey,
+   Limitations, and Recommendations.* 2025. <https://arxiv.org/abs/2502.06688>
