@@ -162,9 +162,9 @@ def _committee_queries(pool_features: np.ndarray, labeled_pool: tuple[np.ndarray
         return rng.choice(len(pool_features), size=n, replace=False)
     votes = np.zeros((COMMITTEE_SIZE, len(pool_features)), dtype=int)
     for i in range(COMMITTEE_SIZE):
-        # Large bootstrap resample (full-length) so members are diverse but fit on the
-        # majority of the labeled pool; draw without replacement of the index set, then
-        # resize to a random subset to create honest disagreement among members.
+        # Each member trains on a random 80% subset of the labeled pool, drawn WITHOUT
+        # replacement (not a bootstrap, and no resizing). Varying the subset across
+        # members is what produces honest committee disagreement.
         idx = rng.choice(len(x_labeled), size=max(2, int(0.8 * len(x_labeled))), replace=False)
         y_sub = y_labeled[idx]
         if len(np.unique(y_sub)) < 2:
