@@ -29,6 +29,23 @@ The pipeline compares four detectors:
 - `Local Outlier Factor`
 - `One-Class SVM`
 
+## Public-benchmark validation and provenance
+
+The three tracked benchmark subsets now have fresh comparison artifacts under
+`results/external_validation_*.json`. Each artifact records the exact input SHA-256,
+canonical dataset landing page, random state, fold count, row count, and run timestamp.
+The rerun reproduced the central result:
+
+| Public benchmark subset | Rows | Unsupervised F1 | Supervised F1 | F1 gap |
+| --- | ---: | ---: | ---: | ---: |
+| UNSW-NB15 | 6,000 | 0.270 | 0.996 | +0.726 |
+| CIC-IDS2017 | 12,000 | 0.264 | 0.966 | +0.703 |
+| CSE-CIC-IDS2018 | 12,000 | 0.183 | 0.924 | +0.741 |
+
+These are prepared public benchmark subsets, not live enterprise traffic. The
+provenance record improves reproducibility but does not remove benchmark-age,
+subset-selection, or deployment-validity limitations.
+
 The final anomaly decision is made with a simple ensemble rule: a row is flagged when at least two methods identify it as anomalous.
 
 ## Features

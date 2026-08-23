@@ -51,6 +51,11 @@ the honest, unflattering result.
 
 ## 2. Data
 
+Fresh external-validation artifacts record SHA-256 hashes and authoritative landing
+pages for all three tracked public subsets. They reproduce unsupervised/supervised F1
+of 0.270/0.996 (UNSW-NB15), 0.264/0.966 (CIC-IDS2017), and 0.183/0.924
+(CSE-CIC-IDS2018). These remain prepared benchmark subsets rather than live traffic.
+
 Three datasets ship with the project. A 12-row basic sample exercises the unlabeled
 path. A 24-row labeled research sample validates the evaluation path on a cleanly
 separable case. The primary benchmark is a 6,000-row subset of UNSW-NB15

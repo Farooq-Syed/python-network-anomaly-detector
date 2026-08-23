@@ -18,7 +18,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
@@ -60,7 +62,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--metrics-output", default=DEFAULT_METRICS)
     parser.add_argument("--plot", default=DEFAULT_PLOT)
     parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument("--dataset-name", default=None, help="Canonical dataset name for provenance.")
+    parser.add_argument("--source-url", default=None, help="Authoritative dataset landing page.")
     return parser
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def unsupervised_ensemble(features: pd.DataFrame, numeric_columns: List[str], z_threshold: float, contamination: float, random_state: int) -> np.ndarray:
@@ -131,7 +143,8 @@ def plot_comparison(payload: dict, path: Path) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
-    features, truth, schema = prepare_benchmark(Path(args.input), args.label_column)
+    input_path = Path(args.input)
+    features, truth, schema = prepare_benchmark(input_path, args.label_column)
     numeric_columns = features.select_dtypes(include=["number"]).columns.tolist()
 
     unsupervised_pred = unsupervised_ensemble(features, numeric_columns, args.z_threshold, args.contamination, args.random_state)
@@ -143,6 +156,15 @@ def main() -> None:
     supervised = supervised_cv(features, truth, args.folds, args.random_state)
 
     payload = {
+        "provenance": {
+            "dataset_name": args.dataset_name or schema,
+            "source_url": args.source_url,
+            "input_path": str(input_path),
+            "input_sha256": sha256_file(input_path),
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "random_state": args.random_state,
+            "folds": args.folds,
+        },
         "schema": schema,
         "rows": int(len(truth)),
         "attacks": int(truth.sum()),

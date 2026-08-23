@@ -1,0 +1,55 @@
+{
+  "provenance": {
+    "dataset_name": "UNSW-NB15 tracked public subset",
+    "source_url": "https://research.unsw.edu.au/projects/unsw-nb15-dataset",
+    "input_path": "data\\unsw_nb15_public_subset.csv",
+    "input_sha256": "48e3bdddb9358d1dab4f2bce904c5e3e14dfe151796581529ee000fde34e986f",
+    "generated_at_utc": "2026-08-23T04:03:15.961098+00:00",
+    "random_state": 42,
+    "folds": 5
+  },
+  "schema": "generic",
+  "rows": 6000,
+  "attacks": 3000,
+  "numeric_features": [
+    "dur",
+    "spkts",
+    "dpkts",
+    "sbytes",
+    "dbytes",
+    "sttl",
+    "dttl",
+    "sload",
+    "dload",
+    "sloss",
+    "dloss",
+    "sinpkt",
+    "dinpkt",
+    "tcprtt",
+    "synack",
+    "ackdat",
+    "ct_srv_src",
+    "ct_dst_ltm",
+    "ct_src_ltm",
+    "ct_dst_src_ltm",
+    "ct_state_ttl",
+    "ct_flw_http_mthd",
+    "is_sm_ips_ports"
+  ],
+  "unsupervised": {
+    "precision": 0.5796,
+    "recall": 0.176,
+    "f1": 0.27
+  },
+  "supervised": {
+    "precision": 0.9914,
+    "precision_std": 0.0024,
+    "recall": 0.9997,
+    "recall_std": 0.0007,
+    "f1": 0.9955,
+    "f1_std": 0.0013,
+    "roc_auc": 0.9972,
+    "roc_auc_std": 0.0008
+  },
+  "gap_f1": 0.7255
+}
