@@ -377,4 +377,6 @@ If you want a compact scholarly grounding for this repo, start with
 
 ## License
 
-Released under the MIT License.
+Released under the **Non-Commercial Personal-Use License** (see `LICENSE`): free to use
+and study for personal/research use, not for commercial sale or production use without
+permission, and attribution required.
