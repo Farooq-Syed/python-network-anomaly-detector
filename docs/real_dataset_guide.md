@@ -53,6 +53,36 @@ The preparation script:
 - preserves the `label` field
 - samples a balanced subset so experiments stay manageable and GitHub-friendly
 
+## Metadata-retaining subsets (for strict family/day splits)
+
+The committed numeric-only subsets drop the attack-family / day metadata that strict
+generalization experiments require. Two additive options retain it:
+
+- `prepare_unsw_nb15.py --include-metadata` keeps a `family` column (UNSW `attack_cat`,
+  with `Normal` mapped to `Benign`) plus an `is_attack` marker.
+- `prepare_cic_ids2017.py --include-metadata` (or `scripts/download_datasets.py`) keeps a
+  `day` column (per flow-sheet weekday) and a `label_name` column (the full attack-type
+  string) alongside the binary `Label`.
+
+The `--include-metadata` flag is off by default, so existing numeric-only outputs and all
+committed artifacts are byte-for-byte unchanged.
+
+One-shot download + prepare (fetches UNSW-NB15 from the `Mouwiya/UNSW-NB15` HF mirror and
+the CIC-IDS2017 `machine_learning/` flows from `bvsam/cic-ids-2017`):
+
+```powershell
+python scripts/download_datasets.py --all
+```
+
+This writes:
+
+```text
+data/unsw_nb15_subset_with_family.csv
+data/cic_ids2017_subset_with_day.csv
+```
+
+`data/unsw_nb15_public_subset.csv` (and the other shipped numeric subsets) are unchanged.
+
 ## Run the Detector on UNSW-NB15
 
 ```powershell

@@ -359,19 +359,42 @@ If you want a compact scholarly grounding for this repo, start with
 - the `CSE-CIC-IDS2018` subset currently uses three attack-bearing CICFlowMeter days,
   which is enough for a meaningful comparison but not a full replay of the entire
   10-day benchmark
+- the metadata-retaining subsets used for the strict family/day splits are 12,000-row
+  balanced samples; several UNSW families and two CIC days are small, so their held-out
+  F1 estimates carry wide confidence intervals
+- the balanced, random-cross-validation numbers are optimistic for in-distribution
+  evaluation; they do not survive strict family/day splits (UNSW generalizes, CIC
+  collapses) or cross-dataset transfer (CIC-IDS2017 → CSE-CIC-IDS2018 is near-random) —
+  see [RESULTS_STRICT_EVALUATION.md](RESULTS_STRICT_EVALUATION.md)
+- the day hold-out skips Monday (its sampled subset has no attacks) and the low-attack
+  days (Tuesday 152, Thursday 35) yield very low F1; count these as small-sample estimates
 
 ## Next Steps
 
 - ~~compare against supervised baselines on labeled public data~~ - done
   (`supervised_baseline.py`, +0.73 F1 over the unsupervised ensemble)
 - ~~quantify the semi-supervised label budget~~ - done
-  (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) 7)
+  (`label_budget_experiment.py`; see [PAPER.md](PAPER.md) §7)
 - ~~compare random vs. uncertainty sampling under a fixed label budget~~ - done on both
   benchmarks (`active_learning_experiment.py`; on UNSW-NB15 uncertainty wins a
   five-thousandths-of-F1 margin on a plateau, on CIC-IDS2017 random wins outright —
-  see [PAPER.md](PAPER.md) 8)
+  see [PAPER.md](PAPER.md) §8)
+- ~~add more query strategies + significance testing~~ - done
+  (`diversity`, `query-by-committee`; `margin`/`entropy` are collapsed into the single
+  posterior-uncertainty strategy because they rank rows identically for a binary
+  logistic-regression posterior; `active_learning_stats.py` repeated-seed paired tests:
+  non-random strategies are significantly *worse* than random on CIC-IDS2017,
+  indistinguishable on UNSW-NB15)
+- ~~strict family/day and cross-dataset generalization~~ - done
+  (`strict_generalization.py`, `cross_dataset.py`; the day hold-out is a true temporal
+  split — the entire held-out day, benign and attack, is test-only; see §2-3 of
+  [RESULTS_STRICT_EVALUATION.md](RESULTS_STRICT_EVALUATION.md))
+- ~~imbalance + operating-point metrics~~ - done
+  (`imbalance_eval.py`; on a 5% reweighted subset recall @ 1% FPR is 0.59-0.67 on
+  CIC-IDS2017, 0.93-0.94 on UNSW; the threshold is set on an inner validation split)
 - explain *why* the query-strategy effect flips sign between benchmarks (calibration?
-  labeling noise?) - the natural next experiment
+  labeling noise?) - calibration analysis exists; a threshold-aware query and a full
+  imbalance/FPR sweep are the remaining nice-to-haves
 - add parameter sensitivity experiments
 - explore feature engineering and dimensionality reduction
 

@@ -31,7 +31,23 @@ the same point further: the unsupervised ensemble drops to F1 ≈ 0.18 while a
 supervised baseline still reaches F1 ≈ 0.92. Query strategy matters far less than the
 benchmark's difficulty, and in the wrong direction on the harder data. All metrics are
 now reported as mean ± std across folds, so the spread is visible rather than
-hidden.
+hidden. Three stricter evaluations bound these claims. First, under repeated-seed
+paired tests the active-learning gap is *statistically* significant only on the hard
+benchmark, and in the wrong direction: the non-random strategies (posterior
+uncertainty, diversity, query-by-committee) are significantly worse than random
+labeling on CIC-IDS2017 (Bonferroni p ≈ 0.03), while indistinguishable on UNSW-NB15.
+Second, a strict
+train-on-some-families/test-on-unseen-families split shows the supervised detector
+generalizes across UNSW families (F1 0.67–1.00) but **collapses** under
+distribution shift when generalizing across CIC-IDS2017 days (F1 0.00–0.75) and
+across datasets (CIC-IDS2017 → CSE-CIC-IDS2018 transfer F1 ≈ 0.01), so the
+reported random-CV numbers are optimistic for in-distribution-only evaluation.
+Third, on a 5% reweighted balanced subset the balanced-subset F1 is replaced
+by operational operating points: recall at a 1% false-positive budget is 0.60–0.69 on
+CIC-IDS2017 (vs. 0.97 on separable UNSW), so the near-perfect balanced F1 is an
+artifact of the 50/50 subset. The defensible contribution is therefore narrow and
+negative: query strategy and even supervised labels give much less than the balanced
+random-CV numbers suggest.
 
 ## 1. Introduction
 
@@ -236,6 +252,50 @@ motivation for the ensemble: isolation- and density-based detectors do not share
 failure mode. The behavior is now pinned by two tests — one with a milder outlier that
 is correctly flagged, one asserting the self-masking case.
 
+## 9.1 Stricter evaluation: statistics, generalization, and operating points
+
+The headline numbers above are *balanced, random-CV* numbers. Three stricter
+evaluations are reported to bound them.
+
+**Statistical significance (repeated seeds, paired tests).**
+`active_learning_stats.py` runs the same per-folds protocol over many seeds,
+collects a per-seed F1 vector for each strategy at a chosen budget, and tests
+random vs. each alternative with a paired two-sided Wilcoxon signed-rank test
+(Bonferroni-corrected across strategies). Four genuinely distinct strategies are
+compared: random (baseline), posterior-uncertainty (the single uncertainty/margin/
+entropy signal), diversity/representativeness, and query-by-committee (QBC).
+At budget 100 on CIC-IDS2017 the non-random strategies land F1 ≈ 0.81 vs. random at
+0.89, a difference that is **significant** after correction (p ≈ 0.03) — and in
+the *wrong* direction. On UNSW-NB15 the alternatives are statistically
+indistinguishable from random (p ≈ 1.0 after correction). The
+active-learning claim is therefore: **query strategy is not reliably better than
+random labeling, and is significantly worse on the harder benchmark.**
+
+**Generalization to unseen families, days, and datasets.**
+`strict_generalization.py` trains on a subset of attack families (or days) plus
+some benign, and tests on benign plus the held-out family/day. On UNSW-NB15 the
+supervised detector generalizes across families (F1 0.67–1.00, AUC ≈ 0.99),
+degrading most for the small families (Worms 0.80, Shellcode 0.89, Backdoor
+0.67). On CIC-IDS2017 the same protocol across *days* collapses (Friday F1 0.62,
+Wednesday 0.75, Thursday 0.02, Tuesday 0.00) even with AUC still moderate — the
+attack families and proportions shift day to day. `cross_dataset.py` transfers a
+model trained on CIC-IDS2017's shared features to CSE-CIC-IDS2018: F1 ≈ 0.01
+against a 0.52 CV-on-train reference, i.e. near-random. UNSW shares no features
+with CIC (21 vs. 78, zero overlap), so no honest cross-dataset number exists
+there. Together these show the ~0.97 F1 balanced random-CV number is optimistic
+for in-distribution evaluation and does not survive a distribution shift of the
+kind a deployment would see.
+
+**Imbalance and operating points.**
+`imbalance_eval.py` down-samples attacks to a 5% reweighted balanced subset and
+reports recall at a fixed false-positive rate. On that subset the
+balanced-weights model's F1 falls to 0.55 (precision 0.39) while the unweighted
+model trades to 0.73 F1 / 0.93 precision; recall at a 1% FPR is 0.60–0.69. On
+UNSW-NB15 (separable outliers) the same 5% imbalance keeps F1 at 0.93 with
+0.97 recall@1%FPR. The near-perfect balanced F1 is an artifact of the 50/50
+subset; at a 5% reweighted class ratio and alert budget the detector misses
+roughly a third of CIC attacks.
+
 ## 10. Relation to prior work
 
 This project uses established methods on an established benchmark rather than proposing
@@ -256,6 +316,30 @@ measured under one cross-validation protocol across multiple benchmark subsets �
 is a stronger basis for its claims than an unverified comparison to numbers from
 another setup.
 
+For the active-learning thread, uncertainty sampling is the canonical query strategy
+(Lewis & Gale 1994; Settles 2009), with margin-based (Tong & Koller 2001), entropy/
+expected-error (Cohn et al. 1996), and diversity/representativeness (Roy & McCallum
+2001) variants. The literature generally reports that these *help*, especially under
+scarce labels. This project deliberately tests that expectation against a negative
+result: on the harder CIC-IDS2017 and CSE-CIC-IDS2018 subsets, several query strategies
+are **significantly worse than random labeling** under repeated-seed paired tests. That
+agrees with a smaller body of work finding active learning's gains are dataset- and
+calibration-dependent, and is the narrow contribution we defend.
+
+For the calibration thread, Platt scaling (Platt 1999), binning/isotonic (Zadrozny &
+Elkan 2002), and the expected-calibration-error framing (Niculescu-Mizil & Caruana 2005;
+Guo et al. 2017) underlie the hypothesis that a poorly calibrated probability estimate
+drives uncertainty sampling to buy ambiguous, high-error rows. Our calibration analysis
+(Brier, ECE, reliability slope, uncertainty-region error) is consistent with that
+mechanism on CIC-IDS2017.
+
+For the generalization thread, the standard practice of random stratified
+cross-validation is widely recognized to give in-distribution optimistic results
+when a model is deployed outside the fold mix it was trained on. hold-out-by-family
+and hold-out-by-day protocols, plus cross-dataset transfer, are what the recency of
+the "network-intrusion-datasets harder than they look" literature (Goldschmidt &
+Chudá 2025) recommends as a check on over-claimed deployment performance.
+
 ## 11. Limitations
 
 - Unsupervised methods struggle on mixed traffic, as the UNSW numbers show; they are
@@ -264,9 +348,21 @@ another setup.
   families beyond the UNSW/CIC line. The claim is that query strategy's effect is
   small and inconsistent in sign; holding that claim more broadly would need a wider
   sweep, ideally with calibrated probabilities and a threshold-aware query strategy.
+- The strict-generalization results are limited by subset size: several UNSW families
+  (Backdoor 11, Worms 22, Shellcode 43 rows) and the low-attack CIC days (Thursday 35,
+  Tuesday 152 rows) are small, so their F1 estimates, while plausible, carry wide
+  confidence intervals that the current protocol does not quantify.
+- The cross-dataset result (CIC-IDS2017 → CSE-CIC-IDS2018, F1 ≈ 0.01) is computed on
+  only the 27 shared CICFlowMeter features of an 78-feature schema; the remaining 51
+  features are excluded, so the transfer test is conservative rather than exhaustive.
+  UNSW-NB15 shares no features with either CIC benchmark, so no cross-dataset number is
+  reported there at all.
+- The imbalance operating points are measured at one attack fraction (5%) and one FPR
+  budget (1%), not a full sweep of both.
 - The CIC-IDS2017 subset is a balanced 12,000-row sample of four days' traffic, not
   the full multi-gigabyte dataset; the full dataset includes more attack families and
-  long-tail behavior that a balanced sample underrepresents.
+  long-tail behavior that a balanced sample underrepresents. The metadata-retaining
+  subsets used for the family/day splits are themselves 12,000-row balanced samples.
 - The CSE-CIC-IDS2018 subset is a balanced 12,000-row sample built from three
   attack-bearing days, not a full replay of the entire 10-day benchmark.
 - The leakage guard matches on column name and would miss an unconventionally named
@@ -282,6 +378,14 @@ CIC-IDS2017 — explains the flip is the natural next step, and a correlation-aw
 leakage check and a calibrated ensemble combiner are further refinements. The
 time-window aggregation remains an opening toward temporal features rather than a
 finished method.
+
+Three additions would strengthen the generalization evidence: (a) larger UNSW family
+subsets so the small-family F1 estimates have meaningful confidence intervals,
+(b) a full-day, full-attack-count CIC-IDS2017 setup so the day-split collapse is
+measured on the complete traffic rather than a sample, and (c) a cross-schema
+feature mapping so UNSW and CIC can be compared directly instead of being declared
+incompatible. Funding and time permitting, a calibrated combiner and a full
+imbalance/FPR sweep would convert the operating-point result into a deployment curve.
 
 ## 13. Conclusion
 
@@ -327,3 +431,27 @@ were directed and verified by Farooq Syed.
 
 7. Patrik Goldschmidt and Daniela Chudá. *Network Intrusion Datasets: A Survey,
    Limitations, and Recommendations.* 2025. <https://arxiv.org/abs/2502.06688>
+
+8. David D. Lewis and William A. Gale. *A Sequential Algorithm for Training Text
+   Classifiers.* SIGIR 1994. (uncertainty sampling)
+
+9. Dan Cohn, Zoubin Ghahramani, and Michael I. Jordan. *Active Learning with
+   Statistical Models.* JAIR 1996. (entropy / expected-error selection)
+
+10. Nicholas Roy and Andrew McCallum. *Toward Optimal Active Learning through Sampling
+    Estimation of Error Reduction.* ICML 2001. (diversity / representativeness)
+
+11. Simon Tong and Daphne Koller. *Support Vector Machine Active Learning with
+    Applications to Text Classification.* JMLR 2001. (margin-based querying)
+
+12. Burr Settles. *Active Learning Literature Survey.* University of Wisconsin-Madison,
+    2009. <https://minds.wisconsin.edu/handle/1793/60660>
+
+13. John Platt. *Probabilistic Outputs for Support Vector Machines and Comparisons to
+    Regularized Likelihood Methods.* 1999. (Platt scaling)
+
+14. Chuan Guo et al. *On Calibration of Modern Neural Networks.* ICML 2017.
+    <https://arxiv.org/abs/1706.04599> (expected-calibration-error framing)
+
+15. Nitesh V. Chawla et al. *SMOTE: Synthetic Minority Over-sampling Technique.*
+    JAIR 2002. (class-imbalance context)

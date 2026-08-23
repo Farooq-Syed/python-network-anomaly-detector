@@ -62,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Path to the prepared output CSV.")
     parser.add_argument("--rows-per-class", type=int, default=4000, help="Maximum number of rows to keep for each label class.")
     parser.add_argument("--random-state", type=int, default=42, help="Random seed used when sampling.")
+    parser.add_argument("--include-metadata", action="store_true",
+        help="Retain the 'attack_cat' family column and a split tag so strict "
+             "train-on-one-family/test-on-unseen-family evaluation is possible. "
+             "Off by default to keep outputs byte-identical to the existing numeric subsets.")
     return parser
 
 
@@ -96,14 +100,22 @@ def sample_balanced(dataframe: pd.DataFrame, rows_per_class: int, random_state: 
     return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=random_state).reset_index(drop=True)
 
 
-def select_features(dataframe: pd.DataFrame) -> pd.DataFrame:
+def select_features(dataframe: pd.DataFrame, include_metadata: bool = False) -> pd.DataFrame:
     if "label" not in dataframe.columns:
         raise ValueError("Expected a 'label' column in the UNSW-NB15 data.")
+    if include_metadata and "attack_cat" not in dataframe.columns:
+        raise ValueError("--include-metadata requires an 'attack_cat' column (UNSW attack family).")
     selected_columns = [column for column in FEATURE_CANDIDATES if column in dataframe.columns]
     if not selected_columns:
         raise ValueError("None of the expected UNSW-NB15 numeric feature columns were found.")
     prepared = dataframe[selected_columns + ["label"]].copy()
     prepared["label"] = prepared["label"].astype(int)
+    if include_metadata:
+        # Normalize the family name (the category column has a "Normal" row for
+        # benign traffic; every other value is an attack family).
+        family = dataframe["attack_cat"].fillna("").astype(str).str.strip()
+        prepared["family"] = family.replace("Normal", "").where(prepared["label"] == 1, "Benign")
+        prepared["is_attack"] = prepared["label"]
     return prepared.dropna()
 
 
@@ -118,7 +130,7 @@ def main() -> None:
             raise ValueError("Provide both --train and --test, or use --hf-dataset.")
         combined = pd.concat([load_csv(Path(args.train)), load_csv(Path(args.test))], ignore_index=True)
 
-    prepared = select_features(combined)
+    prepared = select_features(combined, args.include_metadata)
     prepared = sample_balanced(prepared, args.rows_per_class, args.random_state)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,6 +141,8 @@ def main() -> None:
 
     print(f"Prepared dataset written to: {output_path}")
     print(f"Rows: {len(prepared)}")
+    if args.include_metadata:
+        print(f"Family counts: {prepared['family'].value_counts().to_dict()}")
     print(f"Features kept: {len(prepared.columns) - 1}")
     print(f"Benign rows: {benign_count}")
     print(f"Attack rows: {attack_count}")

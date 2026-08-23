@@ -62,6 +62,25 @@ the README, paper draft, and application materials can cite them consistently.
 13. Burr Settles. *Active Learning Literature Survey.* University of Wisconsin-Madison,
     2009. <https://minds.wisconsin.edu/handle/1793/60660>
 
+14. Dan Cohn, Zoubin Ghahramani, and Michael I. Jordan. *Active Learning with
+    Statistical Models.* JAIR 1996. (expected-error / entropy-based selection)
+    <https://doi.org/10.1613/jair.295>
+
+15. Nicholas Roy and Andrew McCallum. *Toward Optimal Active Learning through
+    Sampling Estimation of Error Reduction.* ICML 2001. (diversity /
+    representativeness sampling)
+
+16. Simon Tong and Daphne Koller. *Support Vector Machine Active Learning with
+    Applications to Text Classification.* JMLR 2001. (margin-based querying)
+
+## Noise-related / imbalanced-learning context
+
+17. Maarten Van Hulse, Taghi Khoshgoftaar, et al. *Data Sampling for Imbalance
+    Learning.* 2019. (class-imbalance sampling and operating-point metrics)
+
+18. Nitesh V. Chawla et al. *SMOTE: Synthetic Minority Over-sampling Technique.*
+    JAIR 2002. <https://doi.org/10.1613/jair.953>
+
 ## AI-use note
 
 AI coding assistance was used during implementation and drafting. The benchmark

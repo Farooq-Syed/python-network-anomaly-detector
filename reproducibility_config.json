@@ -1,0 +1,81 @@
+{
+  "description": "Reproducibility config for python-network-anomaly-detector. Records the seeds, split definitions, and dataset preparation parameters behind every reported number.",
+  "generated_on": "2026-08-23",
+  "feature_scope": "Feature selection excludes any column named in detector.LIKELY_LABEL_COLUMNS (label, attack, attack_cat, class, target, is_anomaly, ground_truth, y, is_attack).",
+
+  "datasets": {
+    "unsw_nb15_subset_with_family.csv": {
+      "source": "Mouwiya/UNSW-NB15 (HF mirror)",
+      "prep": "prepare_unsw_nb15.py --include-metadata",
+      "balanced_sample_seed": 42,
+      "rows_per_class": 6000,
+      "family_column": "family",
+      "label_column": "label",
+      "note": "Balanced 6000 benign / 6000 attack; families preserved."
+    },
+    "cic_ids2017_subset_with_day.csv": {
+      "source": "bvsam/cic-ids-2017 (machine_learning/ flows)",
+      "prep": "scripts/download_datasets.py --cic",
+      "balanced_sample_seed": 42,
+      "rows_per_class": 6000,
+      "day_column": "day",
+      "label_column": "Label",
+      "label_name_column": "label_name",
+      "note": "Balanced 6000 benign / 6000 attack; day + attack-type preserved."
+    },
+    "cse_cic_ids2018_subset.csv": {
+      "source": "CSE-CIC-IDS2018 (three attack-bearing CICFlowMeter days)",
+      "prep": "prepare_cic_ids2017.py (CICFlowMeter schema compatible)",
+      "label_column": "Label"
+    }
+  },
+
+  "active_learning": {
+    "script": "active_learning_experiment.py",
+    "folds": 5,
+    "seed_size": 10,
+    "batch_size": 10,
+    "budget": 240,
+    "default_random_state": 42,
+    "strategies": ["random", "uncertainty", "diversity", "committee"],
+    "balancing": "class_weight='balanced' in base LogisticRegression; folds are StratifiedKFold with random_state from --random-state.",
+    "note": "margin and entropy are collapsed into the single posterior-uncertainty strategy: for a binary logistic-regression posterior they rank rows identically to uncertainty."
+  },
+
+  "active_learning_stats": {
+    "script": "active_learning_stats.py",
+    "folds": 5,
+    "seed_size": 10,
+    "batch_size": 10,
+    "budget": 100,
+    "seeds": [0, 1, 2, 3, 4, 5, 6, 7],
+    "strategy_seed_range": "StratifiedKFold(random_state=seed) for seed in seeds",
+    "test": "paired two-sided Wilcoxon signed-rank + paired t-test on per-seed F1; Bonferroni-corrected across number of alternative strategies",
+    "effect_size_threshold": 0.005
+  },
+
+  "strict_generalization": {
+    "script": "strict_generalization.py",
+    "benign_split_seed": 42,
+    "benign_test_fraction": 0.2,
+    "model": "StandardScaler + LogisticRegression(class_weight='balanced')",
+    "family_mode_test_pool": "held-out family attacks + a 20% benign test split",
+    "day_mode_test_pool": "the ENTIRE held-out day (both benign and attack flows); no held-out-day row appears in training",
+    "note": "day mode is a true temporal hold-out (reviewer-corrected): benign is not split across days."
+  },
+
+  "imbalance_eval": {
+    "script": "imbalance_eval.py",
+    "folds": 5,
+    "random_state": 42,
+    "default_attack_fraction": 0.05,
+    "default_target_fpr": 0.01,
+    "note": "threshold for recall@FPR is selected on an inner validation split of each training fold, then applied once to the untouched test fold (reviewer-corrected)."
+  },
+
+  "cross_dataset": {
+    "script": "cross_dataset.py",
+    "folds": 5,
+    "note": "Uses shared feature-name intersection; UNSW/CIC share zero names, CIC-IDS2017/CSE-CIC-IDS2018 share 27."
+  }
+}

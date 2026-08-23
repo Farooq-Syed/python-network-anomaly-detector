@@ -53,6 +53,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help="Path to the prepared output CSV.")
     parser.add_argument("--rows-per-class", type=int, default=6000, help="Maximum rows to keep for each label class.")
     parser.add_argument("--random-state", type=int, default=42, help="Random seed used when sampling.")
+    parser.add_argument("--include-metadata", action="store_true",
+        help="Retain a 'day' column (per source/flow file, used for day splits) and a "
+             "'label_name' column with the original attack-type string, so strict "
+             "train-on-one-day/test-on-unseen-day and family evaluation is possible. "
+             "Off by default to keep outputs byte-identical to the existing numeric subsets.")
     return parser
 
 
@@ -86,20 +91,28 @@ def find_label_column(dataframe: pd.DataFrame) -> str:
     raise ValueError("No label column ('Label'/'label') was found in the CIC-IDS2017 data.")
 
 
-def select_numeric_features(dataframe: pd.DataFrame, label_column: str) -> pd.DataFrame:
+def select_numeric_features(dataframe: pd.DataFrame, label_column: str, include_metadata: bool = False) -> pd.DataFrame:
     """Keep numeric CICFlowMeter features and a clean binary label.
 
     Some real CIC CSV exports contain repeated header rows in the middle of the file,
     which show up as rows whose label is literally "Label". Those rows are metadata,
     not traffic, and must be removed before binarizing the label column.
+
+    With ``include_metadata``, the original attack-type string is also retained as
+    ``label_name`` and any ``day`` column present is passed through, so strict
+    family/day splits are possible downstream.
     """
     valid_rows = dataframe[label_column].astype(str).str.strip().str.lower() != label_column.lower()
     filtered = dataframe.loc[valid_rows].copy()
 
+    # Preserve an explicitly-attached day/source tag when metadata is requested,
+    # so strict day-based splits are possible downstream.
+    day_values = filtered["day"].copy() if include_metadata and "day" in filtered.columns else None
+
     # CICFlowMeter CSVs can pick up repeated header rows mid-file, which may force
     # pandas to infer some otherwise-numeric columns as object dtype. Coerce every
     # non-label column back toward numeric and keep the ones that succeed.
-    feature_candidates = [column for column in filtered.columns if column != label_column]
+    feature_candidates = [column for column in filtered.columns if column != label_column and column != "day"]
     coerced_features = filtered[feature_candidates].apply(pd.to_numeric, errors="coerce")
     coerced_features = coerced_features.dropna(axis=1, how="all")
     numeric_columns = coerced_features.columns.tolist()
@@ -107,10 +120,15 @@ def select_numeric_features(dataframe: pd.DataFrame, label_column: str) -> pd.Da
         raise ValueError("No numeric feature columns were found in the CIC-style data.")
 
     prepared = coerced_features[numeric_columns].copy()
+    if day_values is not None:
+        prepared["day"] = day_values.values
     prepared[label_column] = filtered[label_column].values
+    label_name = prepared[label_column].astype(str)
     prepared[label_column] = prepared[label_column].apply(
         lambda value: 0 if str(value).strip().lower() == "benign" else 1
     )
+    if include_metadata:
+        prepared["label_name"] = label_name.values
     # Rate-style columns (e.g. "Flow Bytes/s") carry inf where a flow had zero
     # duration; replace those with NaN so the dropna() below removes the row.
     prepared = prepared.replace([float("inf"), float("-inf")], float("nan"))
@@ -125,22 +143,53 @@ def sample_balanced(dataframe: pd.DataFrame, label_column: str, rows_per_class: 
     return pd.concat(parts, ignore_index=True).sample(frac=1, random_state=random_state).reset_index(drop=True)
 
 
+def _day_from_name(name: str) -> str:
+    """Derive a stable day tag from a CIC flow-sheet filename.
+
+    HF/local names look like ``Monday-WorkingHours...`` or
+    ``Thursday-WorkingHours-Morning-WebAttacks...``. Extract the leading
+    weekday token and fall back to the file stem when it is absent.
+    """
+    weekdays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
+                "Saturday", "Sunday")
+    for day in weekdays:
+        if day.lower() in name.lower():
+            return day
+    return Path(name).stem.lower()
+
+
+def _tag_day(dataframe: pd.DataFrame, source_name: str, single: bool) -> pd.DataFrame:
+    """Attach a ``day`` column to a frame from a single flow-sheet source."""
+    tagged = dataframe.copy()
+    tagged["day"] = _day_from_name(source_name)
+    return tagged
+
+
 def main() -> None:
     args = build_parser().parse_args()
     output_path = Path(args.output)
 
     if args.files:
         frames = [_load_one(path) for path in args.files]
+        if args.include_metadata:
+            frames = [_tag_day(df, name, single=True) for df, name in zip(frames, args.files)]
         combined = pd.concat(frames, ignore_index=True)
         source_description = f"{len(frames)} local file(s)"
     elif args.hf_dataset:
         file_names = args.hf_files or DEFAULT_HF_FILES
-        combined = load_hf(args.hf_dataset, args.hf_prefix, file_names)
+        if args.include_metadata:
+            frames = []
+            for name in file_names:
+                frame = load_hf(args.hf_dataset, args.hf_prefix, [name])
+                frames.append(_tag_day(frame, name, single=True))
+            combined = pd.concat(frames, ignore_index=True)
+        else:
+            combined = load_hf(args.hf_dataset, args.hf_prefix, file_names)
         source_description = f"Hugging Face dataset {args.hf_dataset}"
     else:
         raise ValueError("Provide --files or --hf-dataset.")
     label_column = find_label_column(combined)
-    prepared = select_numeric_features(combined, label_column)
+    prepared = select_numeric_features(combined, label_column, args.include_metadata)
     prepared = sample_balanced(prepared, label_column, args.rows_per_class, args.random_state)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +200,8 @@ def main() -> None:
     print(f"Source            : {source_description}")
     print(f"Prepared dataset  : {output_path}")
     print(f"Rows              : {len(prepared)}")
-    print(f"Numeric features  : {len(prepared.columns) - 1}")
+    extra = 2 if args.include_metadata else 0  # label_name + day
+    print(f"Numeric features  : {len(prepared.columns) - 1 - extra}")
     print(f"Benign rows       : {benign_count}")
     print(f"Attack rows       : {attack_count}")
 

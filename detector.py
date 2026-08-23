@@ -102,7 +102,7 @@ def normalize_label(value: object) -> int:
 # These are excluded from the feature set even when the user does not name one as the
 # evaluation label, to avoid training the unsupervised detectors on the answer.
 LIKELY_LABEL_COLUMNS = {"label", "attack", "attack_cat", "class", "target",
-                        "is_anomaly", "ground_truth", "y"}
+                        "is_anomaly", "ground_truth", "y", "is_attack"}
 
 
 def select_numeric_columns(dataframe: pd.DataFrame, label_column: str | None) -> List[str]:
