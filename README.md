@@ -204,6 +204,9 @@ Detects anomalies by isolating observations that are easier to separate from the
 ### Local Outlier Factor
 
 Measures how isolated a row is relative to the density of its local neighborhood.
+The implementation now includes a duplicate-aware retry path for benchmark-style
+data, because public flow datasets often contain repeated rows that make naive LOF
+neighborhoods unstable.
 
 ### One-Class SVM
 
