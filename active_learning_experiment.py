@@ -146,37 +146,53 @@ def _committee_queries(pool_features: np.ndarray, labeled_pool: tuple[np.ndarray
     """Query-by-committee (QBC): label rows the committee disagrees about most.
 
     A committee of ``COMMITTEE_SIZE`` bootstrapped logistic regressions is trained on
-    the already-labeled pool (``labeled_pool`` = (features, labels)); each member votes
-    on the unlabeled pool and rows whose vote distribution is most uncertain (highest
-    vote entropy) are queried. This is a genuinely different disagreement signal from
-    the single model's posterior, so it is a distinct active-learning strategy.
+    the already-labeled pool (``labeled_pool`` = (features, labels)); each member casts a
+    *hard* vote (class 0/1) on the unlabeled pool, and rows with the highest committee
+    disagreement are queried. Disagreement is measured as either vote entropy or vote
+    variance over the committee's hard predictions — a committee split 50/50 (even if
+    each member is confident) scores maximally uncertain, which is the defining property
+    of query-by-committee. This is genuinely different from the single model's posterior.
     """
     from sklearn.linear_model import LogisticRegression
     from sklearn.pipeline import make_pipeline
     from sklearn.preprocessing import StandardScaler
 
     x_labeled, y_labeled = labeled_pool
-    if len(x_labeled) < 2:
+    if len(x_labeled) < 2 or len(x_labeled) < COMMITTEE_SIZE:
         return rng.choice(len(pool_features), size=n, replace=False)
-    votes = np.zeros((COMMITTEE_SIZE, len(pool_features)))
+    votes = np.zeros((COMMITTEE_SIZE, len(pool_features)), dtype=int)
     for i in range(COMMITTEE_SIZE):
-        if len(x_labeled) > 4:
-            idx = rng.choice(len(x_labeled), size=len(x_labeled), replace=True)
-        else:
-            idx = np.arange(len(x_labeled))
+        # Large bootstrap resample (full-length) so members are diverse but fit on the
+        # majority of the labeled pool; draw without replacement of the index set, then
+        # resize to a random subset to create honest disagreement among members.
+        idx = rng.choice(len(x_labeled), size=max(2, int(0.8 * len(x_labeled))), replace=False)
         y_sub = y_labeled[idx]
         if len(np.unique(y_sub)) < 2:
-            votes[i] = np.full(len(pool_features), 0.5)
+            votes[i] = np.full(len(pool_features), 0, dtype=int)
             continue
         member = make_pipeline(
             StandardScaler(),
             LogisticRegression(max_iter=2000, class_weight="balanced"),
         )
         member.fit(x_labeled[idx], y_sub)
-        votes[i] = member.predict_proba(pool_features)[:, 1]
-    certainty = np.abs(votes - 0.5).mean(axis=0)
-    # Highest vote disagreement = lowest mean certainty across members.
-    return np.argsort(certainty)[:n]
+        votes[i] = (member.predict_proba(pool_features)[:, 1] >= 0.5).astype(int)
+    # Committee disagreement over hard votes: half attack (1) / half benign (0).
+    disagreement = _vote_entropy(votes)
+    return np.argsort(-disagreement)[:n]
+
+
+def _vote_entropy(votes: np.ndarray) -> np.ndarray:
+    """Committee disagreement over hard votes, as normalized vote entropy.
+
+    votes is (committee_size, n_pool). For each pool row the fraction voting positive
+    (class 1) is p; binary entropy H(p) is maximized when the committee is evenly
+    split (p = 0.5), regardless of how confident each member is. Entropy is normalized
+    by log(2) so it lies in [0, 1].
+    """
+    p = votes.mean(axis=0)
+    p = np.clip(p, ENTROPY_EPS, 1 - ENTROPY_EPS)
+    entropy = -(p * np.log(p) + (1 - p) * np.log(1 - p))
+    return entropy / np.log(2)
 
 
 def _diversity_queries(features: np.ndarray, n: int, rng: np.random.Generator) -> np.ndarray:

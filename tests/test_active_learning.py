@@ -69,6 +69,35 @@ class QueryStrategyTests(unittest.TestCase):
         self.assertEqual(len(idx), 5)
         self.assertEqual(len(set(idx)), 5)
 
+    def test_vote_entropy_ranks_confident_split_highest(self):
+        # The defining QBC property: a committee evenly split between confident attack
+        # and confident benign predictions must score MAXIMUM disagreement. This is the
+        # case the old mean-|p-0.5| metric got wrong (it reported such rows as certain).
+        votes = np.array([
+            [1, 1, 0],   # confident attack on rows 0,1; confident benign on row 2
+            [0, 0, 0],   # confident benign everywhere
+            [1, 0, 0],   # row 0: attack; rows 1,2 benign
+            [0, 1, 0],   # row 1: attack; rows 0,2 benign
+            [1, 1, 0],
+            [0, 0, 1],   # row 2: attack; rows 0,1 benign
+            [1, 0, 0],
+            [0, 1, 0],
+            [1, 1, 0],
+            [0, 0, 0],
+        ])
+        ent = ale._vote_entropy(votes)
+        # Row 0: 5 attack / 5 benign -> p=0.5 -> max entropy (=1.0).
+        self.assertAlmostEqual(float(ent[0]), 1.0, delta=0.05)
+        # Row 2: 2 attack / 8 benign -> p=0.2 -> lower entropy than row 0.
+        self.assertLess(ent[2], ent[0])
+        # Row 0 must out-rank the confident-unanimous rows.
+        self.assertEqual(int(np.argmax(ent)), 0)
+
+    def test_vote_entropy_unanimous_committee_is_zero(self):
+        votes = np.zeros((10, 4), dtype=int)  # every member votes benign everywhere
+        ent = ale._vote_entropy(votes)
+        self.assertTrue(np.allclose(ent, 0.0, atol=0.05))
+
     def test_committee_requires_labeled_pool(self):
         with self.assertRaises(ValueError):
             ale.select_queries(np.array([0.5, 0.5]), 1, "committee", np.random.default_rng(0), None, None)

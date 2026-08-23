@@ -35,7 +35,7 @@ hidden. Three stricter evaluations bound these claims. First, under repeated-see
 paired tests the active-learning gap is *statistically* significant only on the hard
 benchmark, and in the wrong direction: the non-random strategies (posterior
 uncertainty, diversity, query-by-committee) are significantly worse than random
-labeling on CIC-IDS2017 (Bonferroni p ≈ 0.03), while indistinguishable on UNSW-NB15.
+labeling on CIC-IDS2017 (Bonferroni p ≤ 0.05), while indistinguishable on UNSW-NB15.
 Second, a strict
 train-on-some-families/test-on-unseen-families split shows the supervised detector
 generalizes across UNSW families (F1 0.67–1.00) but **collapses** under
@@ -263,13 +263,16 @@ collects a per-seed F1 vector for each strategy at a chosen budget, and tests
 random vs. each alternative with a paired two-sided Wilcoxon signed-rank test
 (Bonferroni-corrected across strategies). Four genuinely distinct strategies are
 compared: random (baseline), posterior-uncertainty (the single uncertainty/margin/
-entropy signal), diversity/representativeness, and query-by-committee (QBC).
-At budget 100 on CIC-IDS2017 the non-random strategies land F1 ≈ 0.81 vs. random at
-0.89, a difference that is **significant** after correction (p ≈ 0.03) — and in
-the *wrong* direction. On UNSW-NB15 the alternatives are statistically
-indistinguishable from random (p ≈ 1.0 after correction). The
-active-learning claim is therefore: **query strategy is not reliably better than
-random labeling, and is significantly worse on the harder benchmark.**
+entropy signal), diversity/representativeness, and query-by-committee (QBC, which
+measures committee disagreement as vote entropy over each member's hard class
+prediction — a committee split 50/50 between confident attack and confident benign
+scores maximal uncertainty). At budget 100 on CIC-IDS2017 the non-random strategies
+land F1 ≈ 0.80-0.85 vs. random at 0.89, a difference that is **significant** after
+correction (p ≤ 0.05) and in the *wrong* direction; QBC (0.85) is the least-bad of
+the three. On UNSW-NB15 the alternatives are statistically indistinguishable from
+random (none survive Bonferroni correction). The active-learning claim is therefore:
+**query strategy is not reliably better than random labeling, and is significantly
+worse on the harder benchmark.**
 
 **Generalization to unseen families, days, and datasets.**
 `strict_generalization.py` trains on a subset of attack families (or days) plus

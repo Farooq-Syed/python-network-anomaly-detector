@@ -9,15 +9,15 @@ For flow-based intrusion detection, the difference between **unsupervised** and
 **supervised** learning is much larger than the difference between individual
 unsupervised detectors, and a small label budget closes most of that gap — but
 query strategy (active learning) is **not reliably better than random labeling**,
-and is **significantly worse** on the harder benchmark once split leakage and
-imbalance are accounted for.
+and is **significantly worse** on the harder benchmark once in-distribution
+random-CV optimism and class imbalance are accounted for.
 
 ## Narrow, evidence-backed novelty line
 
 > Uncertainty-based active learning is not reliably better than random labeling for
 > intrusion-detection data; calibration and label noise help explain when it fails,
 > and the near-perfect balanced random-CV numbers do not survive strict family/day/
-> cross-dataset splits or a realistic class imbalance.
+> cross-dataset splits or a 5% reweighted balanced subset.
 
 ## Why this is interesting
 
@@ -72,4 +72,4 @@ imbalance are accounted for.
 
 This project turns the usual "which anomaly detector wins?" question into the more
 useful one: **how much do labels and active labeling actually help, once you stop
-leaking the answer across your splits and use a realistic operating point?**
+evaluating on optimistic in-distribution folds and use a reweighted operating point?**

@@ -23,6 +23,11 @@ naturally imbalanced trace).
    flows) is test-only; no held-out-day row appears in training.
 3. The recall@FPR threshold is selected on an inner validation split of each training fold
    and applied once to the untouched test fold.
+4. QBC now measures **committee disagreement** as vote entropy over each member's *hard*
+   class prediction (see `_vote_entropy`), not a mean posterior-certainty. This is the
+   defining QBC property: a committee split 50/50 between confident attack and confident
+   benign scores maximum disagreement. The earlier mean-|p−0.5| metric reported such rows
+   as *certain* — the opposite of QBC.
 
 ---
 
@@ -37,11 +42,12 @@ budget; paired two-sided Wilcoxon signed-rank + paired t-test, Bonferroni-correc
 | random | 0.8887 [0.8824, 0.8951] | — | — | — | — |
 | uncertainty | 0.8079 [0.7827, 0.8330] | −0.0809 | 0.0078 | 0.023 | significantly worse |
 | diversity | 0.7973 [0.7676, 0.8270] | −0.0914 | 0.0078 | 0.023 | significantly worse |
-| committee | 0.7099 [0.6818, 0.7379] | −0.1789 | 0.0078 | 0.023 | significantly worse |
+| committee | 0.8458 [0.8172, 0.8744] | −0.0429 | 0.0156 | 0.047 | significantly worse |
 
 **Reading:** on the harder benchmark every non-random strategy is **significantly worse
-than random**, and QBC — the most different strategy — is the worst. The sign is inverted
-vs. the active-learning literature's usual expectation.
+than random**. QBC (committee disagreement by vote entropy) is the least-bad of the three,
+but still significantly behind random. The sign is inverted vs. the active-learning
+literature's usual expectation.
 
 ### UNSW-NB15 (easy, separable)
 | strategy | F1 (95% CI) | diff vs random | Wilcoxon p | Bonferroni p | decision |
@@ -49,11 +55,12 @@ vs. the active-learning literature's usual expectation.
 | random | 0.9902 [0.9873, 0.9932] | — | — | — | — |
 | uncertainty | 0.9794 [0.9387, 1.0202] | −0.0108 | 0.437 | 1.00 | not significant |
 | diversity | 0.9247 [0.8903, 0.9591] | −0.0655 | 0.031 | 0.094 | not significant |
-| committee | 0.9684 [0.9276, 1.0093] | −0.0218 | 0.562 | 1.00 | not significant |
+| committee | 0.9954 [0.9951, 0.9957] | +0.0052 | 0.031 | 0.094 | not significant |
 
 **Reading:** on the easy benchmark the non-random strategies are **statistically
-indistinguishable** from random (all near a 0.99 plateau; none survive Bonferroni
-correction). Query strategy buys nothing.
+indistinguishable** from random (diversity and committee approach significance at p≈0.09
+but do not survive Bonferroni). Query strategy buys nothing at the ceiling. QBC is the
+best single estimate here (+0.005) but the margin is within noise.
 
 ---
 
