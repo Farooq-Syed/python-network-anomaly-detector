@@ -1,0 +1,15 @@
+{
+  "input": "data/cic_ids2017_subset.csv",
+  "label_column": "Label",
+  "folds": 5,
+  "random_state": 42,
+  "brier_mean": 0.0263,
+  "brier_std": 0.0025,
+  "ece_mean": 0.0195,
+  "ece_std": 0.0028,
+  "reliability_slope_mean": 1.0149,
+  "uncertainty_region_fraction": 0.0337,
+  "uncertainty_region_error_rate": 0.4545,
+  "n_rows": 12000,
+  "n_attacks": 6000
+}

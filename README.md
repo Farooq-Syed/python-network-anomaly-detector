@@ -70,6 +70,8 @@ The final anomaly decision is made with a simple ensemble rule: a row is flagged
 - schema-aware loader for CIC-IDS2017-style data
 - optional per-source time-window aggregation (`--window-minutes`)
 - supervised baseline, label-budget, and active-learning experiments
+- calibration analysis + recalibration experiment (explains the active-learning sign flip) —
+  `calibration_analysis.py`, `recalibration_experiment.py`; see `CALIBRATION_FINDING.md`
 - benchmark-preparation utilities for `UNSW-NB15`, `CIC-IDS2017`, and compatible
   `CICFlowMeter` exports such as `CSE-CIC-IDS2018`
 
@@ -156,6 +158,15 @@ labeling under a fixed budget?):
 ```powershell
 python active_learning_experiment.py --input data/unsw_nb15_public_subset.csv --label-column label
 ```
+
+**Why does the query-strategy sign flip between benchmarks?** The active-learning result is
+inconsistent — uncertainty sampling edges random on UNSW-NB15 but loses on CIC-IDS2017.
+A calibration analysis (`calibration_analysis.py`) gives a quantitative, reproducible
+answer: UNSW-NB15 is near-perfectly calibrated with essentially **no** rows in the
+ambiguity band the strategy targets (so it degenerates to a plateau), while CIC-IDS2017 is
+miscalibrated and the rows the strategy picks are **wrong ~45% of the time** — uncertainty
+sampling buys label noise, so random wins. See
+[CALIBRATION_FINDING.md](CALIBRATION_FINDING.md).
 
 Compare unsupervised vs. supervised detection on the CIC-IDS2017 benchmark (a real
 12,000-row subset, prepared from the `bvsam/cic-ids-2017` mirror, ships in `data/`;

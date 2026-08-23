@@ -1,0 +1,15 @@
+{
+  "input": "data/unsw_nb15_public_subset.csv",
+  "label_column": "label",
+  "folds": 5,
+  "random_state": 42,
+  "brier_mean": 0.0044,
+  "brier_std": 0.0012,
+  "ece_mean": 0.0026,
+  "ece_std": 0.0005,
+  "reliability_slope_mean": 1.0022,
+  "uncertainty_region_fraction": 0.0003,
+  "uncertainty_region_error_rate": 0.1,
+  "n_rows": 6000,
+  "n_attacks": 3000
+}
