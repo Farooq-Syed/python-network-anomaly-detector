@@ -267,10 +267,9 @@ def compute_model_methods(
     result["isolation_forest_flag"] = (isolation_forest.predict(scaled_features) == -1).astype(int)
     result["isolation_forest_score"] = (-isolation_forest.score_samples(scaled_features)).round(4)
 
-    lof = LocalOutlierFactor(contamination=contamination, n_neighbors=min(20, max(2, len(scaled_features) - 1)))
-    lof_predictions = lof.fit_predict(scaled_features)
+    lof_predictions, lof_scores, _ = compute_lof_outputs(scaled_features, contamination)
     result["lof_flag"] = (lof_predictions == -1).astype(int)
-    result["lof_score"] = (-lof.negative_outlier_factor_).round(4)
+    result["lof_score"] = pd.Series(lof_scores, index=scaled_features.index).round(4)
 
     one_class_svm = OneClassSVM(nu=max(0.01, min(0.5, contamination)), kernel="rbf", gamma="scale")
     one_class_svm.fit(scaled_features)
@@ -278,6 +277,56 @@ def compute_model_methods(
     result["one_class_svm_score"] = (-one_class_svm.score_samples(scaled_features)).round(4)
 
     return result
+
+
+def choose_lof_neighbors(row_count: int, base_neighbors: int = 20) -> int:
+    """Pick a safe LOF neighborhood size for the current frame."""
+    if row_count <= 1:
+        return 1
+    return min(base_neighbors, row_count - 1)
+
+def compute_lof_outputs(
+    scaled_features: pd.DataFrame,
+    contamination: float,
+) -> tuple[object, object, int]:
+    """Run LOF with a duplicate-aware retry for benchmark-style data.
+
+    Public flow benchmarks often contain many repeated or near-repeated rows.
+    scikit-learn warns that small neighborhoods can produce unreliable LOF scores
+    in that case. Rather than failing noisily or treating the warning as normal,
+    retry once with a larger neighborhood so the model votes on a broader local
+    context.
+    """
+    row_count = len(scaled_features)
+    initial_neighbors = choose_lof_neighbors(row_count)
+    _, predictions, scores, duplicate_warning = _run_lof_once(
+        scaled_features, contamination, initial_neighbors
+    )
+    if duplicate_warning and row_count > initial_neighbors + 1:
+        retry_neighbors = min(max(initial_neighbors * 2, 35), row_count - 1)
+        if retry_neighbors > initial_neighbors:
+            _, predictions, scores, _ = _run_lof_once(
+                scaled_features, contamination, retry_neighbors
+            )
+            return predictions, scores, retry_neighbors
+    return predictions, scores, initial_neighbors
+
+
+def _run_lof_once(
+    scaled_features: pd.DataFrame,
+    contamination: float,
+    n_neighbors: int,
+) -> tuple[LocalOutlierFactor, object, object, bool]:
+    lof = LocalOutlierFactor(contamination=contamination, n_neighbors=n_neighbors)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        predictions = lof.fit_predict(scaled_features)
+    duplicate_warning = any(
+        "duplicate values are leading to incorrect results" in str(w.message).lower()
+        for w in caught
+    )
+    scores = -lof.negative_outlier_factor_
+    return lof, predictions, scores, duplicate_warning
 
 
 def build_report(

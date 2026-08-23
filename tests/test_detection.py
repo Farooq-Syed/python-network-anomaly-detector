@@ -8,6 +8,7 @@ end-to-end by the smoke test; here we test the deterministic pieces directly.
 import sys
 import unittest
 import warnings
+from unittest import mock
 from pathlib import Path
 
 import pandas as pd
@@ -102,6 +103,41 @@ class EnsembleTests(unittest.TestCase):
         )
         expected = (report["ensemble_votes"] >= 2).astype(int)
         self.assertTrue((report["is_anomaly"] == expected).all())
+
+
+class LofRobustnessTests(unittest.TestCase):
+    def test_choose_lof_neighbors_respects_small_frames(self):
+        self.assertEqual(detector.choose_lof_neighbors(2), 1)
+        self.assertEqual(detector.choose_lof_neighbors(3), 2)
+        self.assertEqual(detector.choose_lof_neighbors(25), 20)
+
+    def test_compute_lof_outputs_retries_with_larger_neighborhood_after_duplicate_warning(self):
+        frame = pd.DataFrame({"a": [0.0] * 40, "b": [1.0] * 40})
+        neighbor_calls = []
+
+        class FakeLof:
+            def __init__(self, contamination, n_neighbors):
+                self.contamination = contamination
+                self.n_neighbors = n_neighbors
+                neighbor_calls.append(n_neighbors)
+                self.negative_outlier_factor_ = pd.Series([-1.0] * len(frame))
+
+            def fit_predict(self, _features):
+                if len(neighbor_calls) == 1:
+                    warnings.warn(
+                        "Duplicate values are leading to incorrect results. Increase the number of neighbors for more accurate results.",
+                        UserWarning,
+                    )
+                return [1, 1, -1, -1]
+
+        with mock.patch.object(detector, "LocalOutlierFactor", FakeLof):
+            predictions, scores, neighbors_used = detector.compute_lof_outputs(frame, contamination=0.1)
+
+        self.assertEqual(list(predictions), [1, 1, -1, -1])
+        self.assertEqual(len(scores), len(frame))
+        self.assertEqual(neighbor_calls[0], 20)
+        self.assertEqual(neighbor_calls[1], 39)
+        self.assertEqual(neighbors_used, 39)
 
 
 if __name__ == "__main__":
