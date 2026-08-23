@@ -46,6 +46,17 @@ These are prepared public benchmark subsets, not live enterprise traffic. The
 provenance record improves reproducibility but does not remove benchmark-age,
 subset-selection, or deployment-validity limitations.
 
+**Results re-verified** on 2026-08-23 by re-running `benchmark_compare.py` on each
+bundled public subset; the figures below reproduce exactly (UNSW-NB15: 0.270 / 0.996;
+CIC-IDS2017: 0.264 / 0.966; CSE-CIC-IDS2018: 0.183 / 0.924). Run the three
+reproductions with:
+
+```powershell
+python benchmark_compare.py --input data/unsw_nb15_public_subset.csv --label-column label
+python benchmark_compare.py --input data/cic_ids2017_subset.csv --label-column Label
+python benchmark_compare.py --input data/cse_cic_ids2018_subset.csv --label-column Label
+```
+
 The final anomaly decision is made with a simple ensemble rule: a row is flagged when at least two methods identify it as anomalous.
 
 ## Features
