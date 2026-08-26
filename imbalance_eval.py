@@ -8,7 +8,7 @@ minority, and reports operational metrics that matter to an analyst:
 
   * F1 and precision/recall at a *fixed* false-positive rate (recall @ FPR).
   * ROC-AUC and PR-AUC (PR-AUC is the right summary metric for heavy imbalance).
-  * detection rate at a realistic alert budget.
+  * detection rate at a specified validation false-positive budget.
 
 Imbalance is produced two ways:
   1. ``--attack-frac`` downsamples the positive class to a target fraction of the
@@ -17,9 +17,9 @@ Imbalance is produced two ways:
 
 The supervised model is identical to the one used elsewhere (StandardScaler +
 LogisticRegression, class_weight='balanced' by default, plus a no-weights run for
-comparison), under 5-fold stratified CV. The FPR is set from the empirical
-test-set posterior so that ``recall_at_fpr`` reports how much detection you get
-for a target false-alarm rate.
+comparison), under 5-fold stratified CV. The threshold is selected only from an
+inner validation split. It maximizes validation recall subject to the requested
+FPR budget and is then applied once to the untouched outer test fold.
 
 Usage:
     python imbalance_eval.py --input data/cic_ids2017_subset_with_day.csv \\
@@ -90,7 +90,7 @@ def _pick_threshold(y_val: np.ndarray, val_prob: np.ndarray, target_fpr: float) 
     once to the untouched test fold. This avoids the optimistic estimate that comes
     from tuning the threshold on the same fold whose metrics are reported.
     """
-    fpr, _, thresholds = roc_curve(y_val, val_prob)
+    fpr, tpr, thresholds = roc_curve(y_val, val_prob)
     if len(thresholds) == 0:
         return float("nan"), float("nan")
     # roc_curve returns an inf threshold for the terminal operating point; keep only
@@ -98,8 +98,16 @@ def _pick_threshold(y_val: np.ndarray, val_prob: np.ndarray, target_fpr: float) 
     finite = np.isfinite(thresholds)
     if not finite.any():
         return float("nan"), float("nan")
-    fpr_f, thr_f = np.asarray(fpr)[finite], np.asarray(thresholds)[finite]
-    idx = int(np.argmin(np.abs(fpr_f - target_fpr)))
+    fpr_f = np.asarray(fpr)[finite]
+    tpr_f = np.asarray(tpr)[finite]
+    thr_f = np.asarray(thresholds)[finite]
+    feasible = np.where(fpr_f <= target_fpr)[0]
+    if len(feasible):
+        best_tpr = np.max(tpr_f[feasible])
+        candidates = feasible[tpr_f[feasible] == best_tpr]
+        idx = int(candidates[np.argmax(thr_f[candidates])])
+    else:
+        idx = int(np.argmin(fpr_f))
     return float(thr_f[idx]), float(fpr_f[idx])
 
 
@@ -107,7 +115,8 @@ def evaluate(features: pd.DataFrame, truth: np.ndarray, folds: int, random_state
              target_fpr: float, use_balanced_weight: bool, attack_frac: float) -> Dict[str, float]:
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
     rows: Dict[str, List[float]] = {k: [] for k in (
-        "precision", "recall", "f1", "roc_auc", "pr_auc", "recall_at_fpr", "actual_fpr")}
+        "precision", "recall", "f1", "roc_auc", "pr_auc", "recall_at_fpr",
+        "validation_fpr", "actual_fpr")}
     for train_idx, test_idx in splitter.split(features, truth):
         # Hold out an inner validation split from the training fold so the FPR
         # threshold is set without touching the test fold.
@@ -125,6 +134,7 @@ def evaluate(features: pd.DataFrame, truth: np.ndarray, folds: int, random_state
         model.fit(features.iloc[inner_train_idx], truth[inner_train_idx])
         val_prob = model.predict_proba(features.iloc[inner_val_idx])[:, 1]
         threshold, val_fpr = _pick_threshold(truth[inner_val_idx], val_prob, target_fpr)
+        rows["validation_fpr"].append(val_fpr)
 
         prob = model.predict_proba(features.iloc[test_idx])[:, 1]
         y_test = truth[test_idx]

@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">Benchmark collection contexts and offline evaluation architecture</title>
+  <desc id="desc">Three benchmark-provider testbeds produce released flow tables. This study prepares subsets, creates strict train validation and test partitions, simulates label acquisition, fits and calibrates a model, then evaluates once on an untouched test fold.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#244A73"/>
+    </marker>
+    <style>
+      .title { font: 700 30px Arial, sans-serif; fill: #17324D; }
+      .section { font: 700 23px Arial, sans-serif; fill: #17324D; }
+      .head { font: 700 20px Arial, sans-serif; fill: #17324D; }
+      .body { font: 17px Arial, sans-serif; fill: #1F2933; }
+      .small { font: 15px Arial, sans-serif; fill: #334E68; }
+      .provider { fill: #EEF4FA; stroke: #244A73; stroke-width: 2; rx: 14; }
+      .study { fill: #F7F9FC; stroke: #526D82; stroke-width: 2; rx: 12; }
+      .boundary { fill: none; stroke: #B23A48; stroke-width: 3; stroke-dasharray: 10 7; rx: 18; }
+      .arrow { stroke: #244A73; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .connector { stroke: #244A73; stroke-width: 3; fill: none; }
+    </style>
+  </defs>
+
+  <text x="720" y="42" text-anchor="middle" class="title">Where the data came from and what this study evaluated</text>
+  <text x="52" y="86" class="section">Benchmark-provider collection environments</text>
+
+  <rect x="52" y="108" width="410" height="190" class="provider"/>
+  <text x="72" y="140" class="head">UNSW-NB15</text>
+  <text x="72" y="172" class="body">
+    <tspan x="72" dy="0">UNSW Canberra Cyber Range</tspan>
+    <tspan x="72" dy="27">IXIA PerfectStorm traffic generation</tspan>
+    <tspan x="72" dy="27">tcpdump packet capture</tspan>
+    <tspan x="72" dy="27">Argus/Bro-derived flow features</tspan>
+  </text>
+
+  <rect x="515" y="108" width="410" height="190" class="provider"/>
+  <text x="535" y="140" class="head">CIC-IDS2017</text>
+  <text x="535" y="172" class="body">
+    <tspan x="535" dy="0">Victim and attack networks</tspan>
+    <tspan x="535" dy="27">12 heterogeneous victim machines</tspan>
+    <tspan x="535" dy="27">Mirror-port traffic capture</tspan>
+    <tspan x="535" dy="27">CICFlowMeter flow extraction</tspan>
+  </text>
+
+  <rect x="978" y="108" width="410" height="190" class="provider"/>
+  <text x="998" y="140" class="head">CSE-CIC-IDS2018</text>
+  <text x="998" y="172" class="body">
+    <tspan x="998" dy="0">50 attacking machines</tspan>
+    <tspan x="998" dy="27">420 victim machines and 30 servers</tspan>
+    <tspan x="998" dy="27">Profile-generated benign/attack activity</tspan>
+    <tspan x="998" dy="27">CICFlowMeter-V3 flow features</tspan>
+  </text>
+
+  <path d="M257 299 L257 345 L720 345" class="connector"/>
+  <path d="M720 299 L720 385" class="arrow"/>
+  <path d="M1183 299 L1183 345 L720 345" class="connector"/>
+
+  <rect x="38" y="374" width="1364" height="330" class="boundary"/>
+  <text x="58" y="409" class="section">This study: offline use of released flow tables only</text>
+
+  <rect x="68" y="446" width="225" height="128" class="study"/>
+  <text x="181" y="480" text-anchor="middle" class="head">Prepare</text>
+  <text x="181" y="512" text-anchor="middle" class="body">numeric flow fields</text>
+  <text x="181" y="539" text-anchor="middle" class="small">family/day metadata kept</text>
+  <text x="181" y="561" text-anchor="middle" class="small">only for strict splitting</text>
+
+  <rect x="340" y="446" width="225" height="128" class="study"/>
+  <text x="453" y="480" text-anchor="middle" class="head">Partition</text>
+  <text x="453" y="512" text-anchor="middle" class="body">train + validation</text>
+  <text x="453" y="539" text-anchor="middle" class="body">+ untouched test</text>
+
+  <rect x="612" y="446" width="225" height="128" class="study"/>
+  <text x="725" y="480" text-anchor="middle" class="head">Acquire labels</text>
+  <text x="725" y="512" text-anchor="middle" class="body">fixed analyst-label</text>
+  <text x="725" y="539" text-anchor="middle" class="body">budget simulation</text>
+
+  <rect x="884" y="446" width="225" height="128" class="study"/>
+  <text x="997" y="480" text-anchor="middle" class="head">Fit + calibrate</text>
+  <text x="997" y="512" text-anchor="middle" class="body">training labels</text>
+  <text x="997" y="539" text-anchor="middle" class="body">validation threshold</text>
+
+  <rect x="1156" y="446" width="225" height="128" class="study"/>
+  <text x="1269" y="480" text-anchor="middle" class="head">Evaluate once</text>
+  <text x="1269" y="512" text-anchor="middle" class="body">untouched test fold</text>
+  <text x="1269" y="539" text-anchor="middle" class="small">F1, AUC, recall, FPR</text>
+
+  <path d="M293 510 L334 510" class="arrow"/>
+  <path d="M565 510 L606 510" class="arrow"/>
+  <path d="M837 510 L878 510" class="arrow"/>
+  <path d="M1109 510 L1150 510" class="arrow"/>
+
+  <text x="720" y="645" text-anchor="middle" class="body">Not observed by the models: packet payloads, physical equipment state, host telemetry, or analyst context</text>
+  <text x="720" y="678" text-anchor="middle" class="small">Dashed boundary separates provider testbeds from the author-controlled experiment.</text>
+</svg>

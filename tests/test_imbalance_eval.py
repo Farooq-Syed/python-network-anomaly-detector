@@ -51,7 +51,14 @@ class OperationalMetricsTests(unittest.TestCase):
         threshold, fpr = im._pick_threshold(y, prob, 0.25)
         self.assertGreaterEqual(threshold, 0.0)
         self.assertLessEqual(threshold, 1.0)
-        self.assertAlmostEqual(fpr, 0.25, delta=0.26)
+        self.assertLessEqual(fpr, 0.25)
+
+    def test_pick_threshold_never_chooses_nearest_point_above_budget(self):
+        y = np.array([0] * 100 + [1] * 4)
+        prob = np.array([0.85, 0.84] + [0.1] * 98 + [0.95, 0.92, 0.82, 0.81])
+        threshold, fpr = im._pick_threshold(y, prob, 0.01)
+        self.assertGreaterEqual(threshold, 0.90)
+        self.assertLessEqual(fpr, 0.01)
 
     def test_evaluate_runs_and_reports_operating_metrics(self):
         df = _frame()

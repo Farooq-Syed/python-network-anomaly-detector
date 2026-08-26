@@ -5,9 +5,11 @@ figures for the strict-evaluation additions: repeated-seed statistics, family/da
 generalization, cross-dataset transfer, and imbalance/operating points. Every number is
 produced by a script named against it, with seeds in `reproducibility_config.json`.
 
-> All supervised models are `StandardScaler + LogisticRegression(class_weight='balanced')`
-> (the base model used throughout); the unsupervised ensemble is the four-detector vote.
-> Splits are `StratifiedKFold` unless a strict hold-out is specified.
+> The headline and strict supervised results use
+> `StandardScaler + LogisticRegression(class_weight='balanced')`; the learner-sensitivity
+> section additionally evaluates a calibrated histogram-gradient-boosting learner. The
+> unsupervised ensemble is the four-detector vote. Splits are `StratifiedKFold` unless a
+> strict hold-out is specified.
 
 **Terminology.** The balanced, random-cross-validation numbers are described as
 *in-distribution random-CV optimism*, not "split leakage" — the mechanism is that the CV
@@ -82,8 +84,9 @@ best single estimate here (+0.005) but the margin is within noise.
 | Shellcode | 43 | 0.887 | 0.997 | 0.351 |
 | Worms | 22 | 0.800 | 0.996 | 0.211 |
 
-**Reading:** supervised generalizes across families (F1 0.67–1.00, AUC ≈ 0.99); the drop
-is largest for the smallest families. Unsupervised family-agnostic detection is weaker
+**Reading:** the supervised baseline retains high performance on most of these bounded
+family holdouts (F1 0.67–1.00, AUC ≈ 0.99); the drop is largest for the smallest families.
+Unsupervised family-agnostic detection is weaker
 (F1 0.11–0.51).
 
 ### CIC-IDS2017 — hold out one ENTIRE day (benign + attacks, no day leakage)
@@ -96,10 +99,10 @@ is largest for the smallest families. Unsupervised family-agnostic detection is 
 
 *(Monday has no sampled attacks, so it is skipped.)*
 
-**Reading:** with a true temporal hold-out the supervised detector **collapses across days**
-(F1 0.00–0.75) even where AUC stays moderate; attack families and proportions shift
-day to day. The balanced random-CV number (0.97) is in-distribution-optimistic and does not
-survive a distribution shift.
+**Reading:** with a true temporal hold-out the supervised result becomes highly day-dependent
+(F1 0.00–0.75) even where AUC stays moderate; attack families and proportions shift day to
+day. The balanced random-CV number (0.97) is in-distribution-optimistic and does not describe
+every held-out day.
 
 ---
 
@@ -121,26 +124,32 @@ number is reported.
 
 ## 4. Imbalance and operating points (corrected threshold)
 
-`imbalance_eval.py` — 5% reweighted balanced subset, 5-fold CV, recall at 1% FPR with the
-threshold selected on an inner validation split.
+`imbalance_eval.py` — 5% reweighted balanced subset, 5-fold outer CV. Within each outer
+training fold, the first split of a stratified 5-fold inner partition reserves 20% for
+validation. The model is fitted on the remaining 80%; the threshold maximizes validation
+recall subject to validation FPR ≤ 1% and is applied once to the untouched outer test fold.
+The 5% subset is constructed deterministically before CV by retaining every benign row and
+sampling attack rows; it is not a naturally observed prevalence.
 
 ### CIC-IDS2017 (5% attacks)
 | model | precision | recall | F1 | ROC-AUC | PR-AUC | recall @ 1% FPR |
 |---|---:|---:|---:|---:|---:|---:|
-| balanced weights | 0.393 | 0.946 | 0.556 | 0.971 | 0.773 | 0.585 |
-| unweighted | 0.926 | 0.608 | 0.733 | 0.974 | 0.807 | 0.668 |
+| balanced weights | 0.393 | 0.946 | 0.556 | 0.971 | 0.773 | 0.579 |
+| unweighted | 0.926 | 0.608 | 0.733 | 0.974 | 0.807 | 0.665 |
 
 ### UNSW-NB15 (5% attacks)
 | model | precision | recall | F1 | ROC-AUC | PR-AUC | recall @ 1% FPR |
 |---|---:|---:|---:|---:|---:|---:|
-| balanced weights | 0.868 | 0.997 | 0.928 | 0.997 | 0.889 | 0.940 |
-| unweighted | 0.873 | 0.975 | 0.921 | 0.994 | 0.882 | 0.931 |
+| balanced weights | 0.868 | 0.997 | 0.928 | 0.997 | 0.885 | 0.972 |
+| unweighted | 0.873 | 0.975 | 0.921 | 0.994 | 0.882 | 0.975 |
 
 **Reading:** on a 5% reweighted subset the balanced-weights model's precision collapses on
-CIC (0.39 → most alerts are false), F1 drops to 0.56, and recall at a 1% FPR is only
-0.585–0.668. On UNSW (separable outliers) the same settings keep F1 at 0.92–0.93 with
-0.93–0.94 recall@1%FPR. The near-perfect balanced F1 (0.97) is an artifact of the 50/50
-subset.
+CIC (0.39 → most alerts are false), F1 drops to 0.56, and recall at a 1% validation-FPR
+budget is only 0.579–0.665. Mean selected validation FPR is 0.0077 and achieved outer-test
+FPR is 0.0057 for both models. On UNSW (separable outliers) the same settings keep F1 at
+0.92–0.93 with 0.972–0.975 recall@1%FPR; achieved test FPR is 0.0075–0.0078. The
+near-perfect balanced random-CV F1 (0.97) is conditional on the prepared 50/50 reference
+subset and is not an operational-prevalence estimate.
 
 ---
 

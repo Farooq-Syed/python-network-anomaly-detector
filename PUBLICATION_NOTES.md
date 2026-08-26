@@ -44,7 +44,7 @@ random-CV optimism and class imbalance are accounted for.
 - Cross-dataset (`cross_dataset.py`): CIC-IDS2017 → CSE-CIC-IDS2018 transfer F1 ≈ 0.01
   (vs 0.52 CV-on-train); UNSW/CIC share zero features, so no number there.
 - Imbalance/operating points (`imbalance_eval.py`): on a 5% reweighted subset,
-  recall @ 1% FPR is 0.59-0.67 on CIC-IDS2017 (0.93-0.94 on UNSW); balanced F1 0.97 is an
+  recall @ 1% validation-FPR is 0.58-0.66 on CIC-IDS2017 (0.97 on UNSW); balanced F1 0.97 is an
   artifact of the 50/50 subset.
 - 64 passing tests.
 

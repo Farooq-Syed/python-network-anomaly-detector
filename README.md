@@ -6,6 +6,20 @@
 
 This project explores anomaly detection for network traffic using a mix of statistical and unsupervised machine learning methods. It was built around flow-level features such as packet counts, byte volume, duration, timing, and connection statistics.
 
+The research framing is cybersecurity-first: machine learning is used to test whether
+active selection of flows actually reduces labeling needs under network-traffic shift.
+It is an offline evaluation of prepared public benchmark tables, not a new classifier,
+a live-network deployment, or an author-built equipment testbed. The target readers are
+cybersecurity, intrusion-detection, and security-ML reviewers; the workshop manuscript
+defines its central metrics and documents the data and information boundaries explicitly.
+
+The authoritative external-review files are `PNAD_anonymous_workshop_paper.docx` and
+`PNAD_anonymous_workshop_paper.pdf`. The title page is visibly marked
+"Reviewer-Feedback Revision | August 2026," and the manuscript includes Figure 1,
+which diagrams the UNSW-NB15, CIC-IDS2017, and CSE-CIC-IDS2018 provider testbeds and
+the separate offline evaluation pipeline used in this project. `PAPER.md` is retained
+as a longer historical project report, not as the current submission manuscript.
+
 Developed with AI coding assistance; the author chose the benchmarks, designed the
 comparisons, reviewed and revised the code, interpreted the results, and verified the
 final claims.
@@ -390,7 +404,7 @@ If you want a compact scholarly grounding for this repo, start with
   split — the entire held-out day, benign and attack, is test-only; see §2-3 of
   [RESULTS_STRICT_EVALUATION.md](RESULTS_STRICT_EVALUATION.md))
 - ~~imbalance + operating-point metrics~~ - done
-  (`imbalance_eval.py`; on a 5% reweighted subset recall @ 1% FPR is 0.59-0.67 on
+  (`imbalance_eval.py`; on a 5% reweighted subset recall @ 1% validation-FPR is 0.58-0.66 on
   CIC-IDS2017, 0.93-0.94 on UNSW; the threshold is set on an inner validation split)
 - explain *why* the query-strategy effect flips sign between benchmarks (calibration?
   labeling noise?) - calibration analysis exists; a threshold-aware query and a full

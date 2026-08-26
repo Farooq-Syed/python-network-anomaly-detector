@@ -31,6 +31,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import make_pipeline
@@ -49,6 +51,7 @@ DEFAULT_SEED = 10
 DEFAULT_BATCH = 10
 DEFAULT_BUDGET = 240
 STRATEGIES = ["random", "uncertainty", "diversity", "committee"]
+MODEL_FAMILIES = ["logistic", "hist_gradient_boosting"]
 
 # Diversity sampling k-means components (a cheap representativeness approximant,
 # not a state-of-the-art Coreset/BADGE).
@@ -78,6 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--unsupervised-reference", type=float, default=UNSUPERVISED_ENSEMBLE_F1, help="Reference unsupervised F1 (drawn on the plot).")
     parser.add_argument("--supervised-reference", type=float, default=FULLY_SUPERVISED_F1, help="Reference fully-supervised F1 (drawn on the plot).")
     parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument(
+        "--model-family", choices=MODEL_FAMILIES, default="logistic",
+        help=("Base learner. The histogram gradient-boosting sensitivity uses "
+              "training-only sigmoid calibration for posterior-based querying."),
+    )
     return parser
 
 
@@ -93,11 +101,29 @@ def load_labeled(path: Path, label_column: str):
     return features, truth
 
 
-def _make_model():
-    return make_pipeline(
-        StandardScaler(),
-        LogisticRegression(max_iter=2000, class_weight="balanced"),
-    )
+def _make_model(model_family: str = "logistic", random_state: int = 42):
+    """Construct the active learner without using test-fold information.
+
+    The nonlinear sensitivity model is calibrated only on the currently labeled
+    training pool.  This keeps posterior uncertainty meaningful without allowing
+    test labels or test scores to influence acquisition.
+    """
+    if model_family == "logistic":
+        return make_pipeline(
+            StandardScaler(),
+            LogisticRegression(max_iter=2000, class_weight="balanced"),
+        )
+    if model_family == "hist_gradient_boosting":
+        base = HistGradientBoostingClassifier(
+            learning_rate=0.08,
+            max_iter=100,
+            max_leaf_nodes=15,
+            min_samples_leaf=2,
+            l2_regularization=1.0,
+            random_state=random_state,
+        )
+        return CalibratedClassifierCV(estimator=base, method="sigmoid", cv=2)
+    raise ValueError(f"Unknown model family: {model_family}")
 
 
 def _entropy(probabilities: np.ndarray) -> np.ndarray:
@@ -108,7 +134,8 @@ def _entropy(probabilities: np.ndarray) -> np.ndarray:
 
 def select_queries(probabilities: np.ndarray, n: int, strategy: str, rng: np.random.Generator,
                    pool_features: np.ndarray | None = None,
-                   labeled_pool: tuple[np.ndarray, np.ndarray] | None = None) -> np.ndarray:
+                   labeled_pool: tuple[np.ndarray, np.ndarray] | None = None,
+                   model_family: str = "logistic") -> np.ndarray:
     """Pick the next rows to label under a query strategy.
 
     All strategies return indices into the candidate (unlabeled) pool, i.e. rows of
@@ -123,7 +150,8 @@ def select_queries(probabilities: np.ndarray, n: int, strategy: str, rng: np.ran
     * ``uncertainty`` — the rows whose positive posterior is closest to 0.5.
     * ``diversity``  — a cheap representativeness approximant: k-means cluster centers
       in feature space (not a state-of-the-art Coreset/BADGE).
-    * ``committee``  — query-by-committee: a small ensemble of bootstrapped classifiers
+    * ``committee``  — query-by-committee: a small ensemble trained on independently drawn
+      80% subsets of the labeled pool without replacement
       trained on the labeled pool; the query is the rows with the highest vote entropy.
       This disagreement metric is independent of the single-model posterior.
     * ``random``     — the fully random baseline to beat.
@@ -137,15 +165,17 @@ def select_queries(probabilities: np.ndarray, n: int, strategy: str, rng: np.ran
     if strategy == "committee":
         if pool_features is None or labeled_pool is None:
             raise ValueError("committee sampling requires both the pool and the labeled pool.")
-        return _committee_queries(pool_features, labeled_pool, n, rng)
+        return _committee_queries(pool_features, labeled_pool, n, rng, model_family)
     return rng.choice(len(probabilities), size=n, replace=False)
 
 
 def _committee_queries(pool_features: np.ndarray, labeled_pool: tuple[np.ndarray, np.ndarray],
-                       n: int, rng: np.random.Generator) -> np.ndarray:
+                       n: int, rng: np.random.Generator,
+                       model_family: str = "logistic") -> np.ndarray:
     """Query-by-committee (QBC): label rows the committee disagrees about most.
 
-    A committee of ``COMMITTEE_SIZE`` bootstrapped logistic regressions is trained on
+    A committee of ``COMMITTEE_SIZE`` classifiers is trained on independently drawn
+    80% subsets of
     the already-labeled pool (``labeled_pool`` = (features, labels)); each member casts a
     *hard* vote (class 0/1) on the unlabeled pool, and rows with the highest committee
     disagreement are queried. Disagreement is measured as either vote entropy or vote
@@ -170,10 +200,24 @@ def _committee_queries(pool_features: np.ndarray, labeled_pool: tuple[np.ndarray
         if len(np.unique(y_sub)) < 2:
             votes[i] = np.full(len(pool_features), 0, dtype=int)
             continue
-        member = make_pipeline(
-            StandardScaler(),
-            LogisticRegression(max_iter=2000, class_weight="balanced"),
-        )
+        if model_family == "logistic":
+            member = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(max_iter=2000, class_weight="balanced"),
+            )
+        elif model_family == "hist_gradient_boosting":
+            # QBC uses hard votes, so committee members do not need posterior
+            # calibration. Each member is still trained only on its labeled subset.
+            member = HistGradientBoostingClassifier(
+                learning_rate=0.08,
+                max_iter=100,
+                max_leaf_nodes=15,
+                min_samples_leaf=2,
+                l2_regularization=1.0,
+                random_state=int(rng.integers(0, 2**31 - 1)),
+            )
+        else:
+            raise ValueError(f"Unknown model family: {model_family}")
         member.fit(x_labeled[idx], y_sub)
         votes[i] = (member.predict_proba(pool_features)[:, 1] >= 0.5).astype(int)
     # Committee disagreement over hard votes: half attack (1) / half benign (0).
@@ -242,7 +286,8 @@ def _seed_labels(y_train: np.ndarray, seed_size: int, rng: np.random.Generator) 
     return chosen
 
 
-def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_size, budget, random_state) -> Dict[str, float]:
+def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_size,
+             budget, random_state, model_family="logistic") -> Dict[str, float]:
     x_train, x_test = features[train_idx], features[test_idx]
     y_train, y_test = truth[train_idx], truth[test_idx]
     rng = np.random.default_rng(random_state)
@@ -254,7 +299,7 @@ def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_si
 
     result: Dict[str, float] = {}
     while len(labeled) <= budget and unlabeled_mask.any():
-        model = _make_model()
+        model = _make_model(model_family, random_state + len(labeled))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model.fit(x_train[labeled], y_train[labeled])
@@ -270,6 +315,7 @@ def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_si
             probabilities, next_size, strategy, rng,
             pool_features=x_train[remaining],
             labeled_pool=(x_train[labeled], y_train[labeled]),
+            model_family=model_family,
         )
         chosen = remaining[queries]
         labeled = np.concatenate([labeled, chosen])
@@ -278,12 +324,15 @@ def run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_si
     return result
 
 
-def run(features, truth, folds, seed_size, batch_size, budget, random_state, strategies=STRATEGIES) -> Dict[str, Dict[int, Dict[str, float]]]:
+def run(features, truth, folds, seed_size, batch_size, budget, random_state,
+        strategies=STRATEGIES, model_family="logistic") -> Dict[str, Dict[int, Dict[str, float]]]:
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=random_state)
     per_strategy: Dict[str, Dict[int, List[float]]] = {strategy: {} for strategy in strategies}
     for train_idx, test_idx in splitter.split(features, truth):
         for strategy in strategies:
-            fold_result = run_fold(features, truth, train_idx, test_idx, strategy, seed_size, batch_size, budget, random_state)
+            fold_result = run_fold(features, truth, train_idx, test_idx, strategy,
+                                   seed_size, batch_size, budget, random_state,
+                                   model_family=model_family)
             for label_count, f1 in fold_result.items():
                 per_strategy[strategy].setdefault(label_count, []).append(f1)
 
@@ -355,7 +404,9 @@ def main() -> None:
     args = build_parser().parse_args()
     features, truth = load_labeled(Path(args.input), args.label_column)
     print(f"Loaded {len(truth)} rows, {int(truth.sum())} attacks.\n")
-    results = run(features, truth, args.folds, args.seed_size, args.batch_size, args.budget, args.random_state, args.strategies)
+    results = run(features, truth, args.folds, args.seed_size, args.batch_size,
+                  args.budget, args.random_state, args.strategies,
+                  model_family=args.model_family)
     save_metrics(results, Path(args.metrics_output), args.unsupervised_reference, args.supervised_reference)
     plot_curves(results, Path(args.plot), args.unsupervised_reference, args.supervised_reference)
     print_summary(results, args.unsupervised_reference, args.supervised_reference)

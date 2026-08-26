@@ -128,5 +128,29 @@ class ReproducibilityTests(unittest.TestCase):
                 )
 
 
+class LearnerSensitivityTests(unittest.TestCase):
+    def test_hist_gradient_boosting_returns_probabilities(self):
+        X, y = separable(n_per_class=20, seed=11)
+        model = ale._make_model("hist_gradient_boosting", random_state=3)
+        model.fit(X, y)
+        probabilities = model.predict_proba(X)[:, 1]
+        self.assertEqual(probabilities.shape, (40,))
+        self.assertTrue(np.all((probabilities >= 0) & (probabilities <= 1)))
+
+    def test_nonlinear_fold_is_deterministic(self):
+        X, y = separable(n_per_class=30, seed=7)
+        train_idx = np.concatenate([np.arange(0, 24), np.arange(30, 54)])
+        test_idx = np.concatenate([np.arange(24, 30), np.arange(54, 60)])
+        kwargs = dict(
+            features=X, truth=y, train_idx=train_idx, test_idx=test_idx,
+            strategy="uncertainty", seed_size=10, batch_size=10, budget=20,
+            random_state=4, model_family="hist_gradient_boosting",
+        )
+        first = ale.run_fold(**kwargs)
+        second = ale.run_fold(**kwargs)
+        self.assertEqual(first, second)
+        self.assertEqual(set(first), {10, 20})
+
+
 if __name__ == "__main__":
     unittest.main()

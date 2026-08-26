@@ -1,3 +1,25 @@
+# Project Research Report (Not the Current Submission Manuscript)
+
+> **Current external-review manuscript:** `PNAD_anonymous_workshop_paper.docx`
+> and `PNAD_anonymous_workshop_paper.pdf`, visibly labeled
+> **Reviewer-Feedback Revision | August 2026**. Those files are generated from
+> `paper_draft_builder.py` and are the authoritative publication draft. This
+> Markdown document preserves the longer project history and exploratory analysis;
+> it should not be sent to reviewers as the workshop paper.
+
+## Current publication framing
+
+The submission is a specialized cybersecurity measurement paper written to remain
+accessible to general cybersecurity reviewers. It defines network-flow records,
+precision, recall, F1, false-positive rate, label budgets, and the tested acquisition
+strategies before presenting the technical protocol. Its architecture section now
+distinguishes the benchmark providers' collection testbeds from the author-controlled
+offline pipeline, supported by a full-page data/system diagram. The narrow contribution
+remains unchanged: under the frozen protocols, active querying does not reliably beat
+random labeling, and in-distribution evaluation can overstate performance under shift.
+
+---
+
 # What Labels Actually Buy on Network Traffic — and Whether It Matters Who Picks Them
 
 **Farooq Syed** · M.S. in Computer and Information Security Systems, Eastern Illinois University · 2023
@@ -43,7 +65,7 @@ distribution shift when generalizing across CIC-IDS2017 days (F1 0.00–0.75) an
 across datasets (CIC-IDS2017 → CSE-CIC-IDS2018 transfer F1 ≈ 0.01), so the
 reported random-CV numbers are optimistic for in-distribution-only evaluation.
 Third, on a 5% reweighted balanced subset the balanced-subset F1 is replaced
-by operational operating points: recall at a 1% false-positive budget is 0.60–0.69 on
+by operational operating points: recall at a 1% validation false-positive budget is 0.58–0.66 on
 CIC-IDS2017 (vs. 0.97 on separable UNSW), so the near-perfect balanced F1 is an
 artifact of the 50/50 subset. The defensible contribution is therefore narrow and
 negative: query strategy and even supervised labels give much less than the balanced
@@ -293,7 +315,7 @@ kind a deployment would see.
 `imbalance_eval.py` down-samples attacks to a 5% reweighted balanced subset and
 reports recall at a fixed false-positive rate. On that subset the
 balanced-weights model's F1 falls to 0.55 (precision 0.39) while the unweighted
-model trades to 0.73 F1 / 0.93 precision; recall at a 1% FPR is 0.60–0.69. On
+model trades to 0.73 F1 / 0.93 precision; recall at a 1% validation-FPR budget is 0.58–0.66. On
 UNSW-NB15 (separable outliers) the same 5% imbalance keeps F1 at 0.93 with
 0.97 recall@1%FPR. The near-perfect balanced F1 is an artifact of the 50/50
 subset; at a 5% reweighted class ratio and alert budget the detector misses

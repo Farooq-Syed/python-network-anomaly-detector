@@ -32,7 +32,7 @@ import numpy as np
 from scipy import stats
 from sklearn.model_selection import StratifiedKFold
 
-from active_learning_experiment import STRATEGIES, load_labeled, run_fold
+from active_learning_experiment import MODEL_FAMILIES, STRATEGIES, load_labeled, run_fold
 
 DEFAULT_METRICS = "output/active_learning_stats.json"
 
@@ -42,7 +42,7 @@ EFFECT_SIZE_EPS = 0.005
 
 
 def run_repeated(features, truth, folds, seed_size, batch_size, budget,
-                 seeds, strategies) -> Dict[str, Dict[int, List[float]]]:
+                 seeds, strategies, model_family="logistic") -> Dict[str, Dict[int, List[float]]]:
     """Run one active-learning trajectory per seed, return per-seed F1 per strategy.
 
     Returns {strategy: {label_count: [f1_seed0, f1_seed1, ...]}}.
@@ -53,7 +53,8 @@ def run_repeated(features, truth, folds, seed_size, batch_size, budget,
         for train_idx, test_idx in splitter.split(features, truth):
             for strategy in strategies:
                 fold_result = run_fold(features, truth, train_idx, test_idx,
-                                       strategy, seed_size, batch_size, budget, seed)
+                                       strategy, seed_size, batch_size, budget, seed,
+                                       model_family=model_family)
                 for label_count, f1 in fold_result.items():
                     per_strategy[strategy].setdefault(label_count, []).append(f1)
     return per_strategy
@@ -98,6 +99,7 @@ def main() -> None:
     ap.add_argument("--random-state-start", type=int, default=0, help="First seed value.")
     ap.add_argument("--strategies", nargs="+", default=STRATEGIES, choices=STRATEGIES)
     ap.add_argument("--metrics-output", default=DEFAULT_METRICS)
+    ap.add_argument("--model-family", choices=MODEL_FAMILIES, default="logistic")
     args = ap.parse_args()
 
     features, truth = load_labeled(Path(args.input), args.label_column)
@@ -106,7 +108,8 @@ def main() -> None:
           f"{len(seeds)} seeds x {args.folds} folds, budget={args.budget}")
 
     per_strategy = run_repeated(features, truth, args.folds, args.seed_size,
-                                args.batch_size, args.budget, seeds, args.strategies)
+                                args.batch_size, args.budget, seeds, args.strategies,
+                                model_family=args.model_family)
 
     # Pool fold-level F1 per seed so each seed contributes one value per strategy.
     per_seed: Dict[str, List[float]] = {s: [] for s in args.strategies}
@@ -150,6 +153,7 @@ def main() -> None:
         "seeds": len(seeds),
         "folds": args.folds,
         "strategies": args.strategies,
+        "model_family": args.model_family,
         "effect_size_threshold": EFFECT_SIZE_EPS,
         "per_seed_f1": per_seed,
         "summary": summary,
